@@ -1,6 +1,9 @@
 package com.binaryigor.eventsql.test;
 
-import com.binaryigor.eventsql.*;
+import com.binaryigor.eventsql.Event;
+import com.binaryigor.eventsql.EventSQL;
+import com.binaryigor.eventsql.EventSQLConsumers;
+import com.binaryigor.eventsql.EventSQLDialect;
 import com.binaryigor.eventsql.internal.sharded.ShardedEventSQLConsumers;
 import com.binaryigor.eventsql.internal.sharded.ShardedEventSQLPublisher;
 import com.binaryigor.eventsql.internal.sharded.ShardedEventSQLRegistry;
@@ -45,9 +48,7 @@ public abstract class ShardedIntegrationTest {
     @BeforeEach
     protected void baseSetup() {
         var testClock = new TestClock();
-        eventSQL = new EventSQL(dataSources.stream()
-                .map(ds -> new EventSQL.DataSource(EventSQL.Dialect.POSTGRES, ds))
-                .toList(), testClock);
+        eventSQL = new EventSQL(dataSources, EventSQLDialect.POSTGRES, testClock);
         registry = (ShardedEventSQLRegistry) eventSQL.registry();
         publisher = (ShardedEventSQLPublisher) eventSQL.publisher();
         consumers = (ShardedEventSQLConsumers) eventSQL.consumers();
@@ -55,17 +56,36 @@ public abstract class ShardedIntegrationTest {
         dltEventFactory = eventSQL.consumers().dltEventFactory();
 
         var transactions = dslContexts.stream().map(SQLTransactions::new).toList();
-        eventRepositories = transactions.stream().map(t -> new SQLEventRepository(t, EventSQL.Dialect.POSTGRES, 100)).toList();
+        eventRepositories = transactions.stream().map(t -> new SQLEventRepository(t, t, EventSQLDialect.POSTGRES)).toList();
 
         dslContexts.forEach(ctx -> cleanDb(ctx, registry));
     }
 
     @AfterEach
     protected void baseTearDown() {
+        publisher.stop(Duration.ofSeconds(3));
         consumers.stop(Duration.ofSeconds(3));
     }
 
     protected List<Event> publishedEvents(int shard, String topic) {
-        return eventRepositories.get(shard).nextEvents(topic, null, null, 0, Integer.MAX_VALUE);
+        return eventRepositories.get(shard).nextEvents(topic, null, null, Integer.MAX_VALUE);
+    }
+
+    protected void delay(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    protected void flushPublishBuffers() {
+        eventRepositories.forEach(er -> {
+            var flushed = er.flushBuffer(Short.MAX_VALUE);
+            if (flushed == 0) {
+                // if flush was in progress, wait arbitrary amount of time for it to finish
+                delay(100);
+            }
+        });
     }
 }

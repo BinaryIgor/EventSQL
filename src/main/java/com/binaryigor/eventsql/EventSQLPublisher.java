@@ -1,5 +1,6 @@
 package com.binaryigor.eventsql;
 
+import java.time.Duration;
 import java.util.Collection;
 
 public interface EventSQLPublisher {
@@ -11,6 +12,8 @@ public interface EventSQLPublisher {
     void configurePartitioner(Partitioner partitioner);
 
     Partitioner partitioner();
+
+    void stop(Duration timeout);
 
     interface Partitioner {
         int partition(EventPublication publication, int topicPartitions);

@@ -1,13 +1,15 @@
 package com.binaryigor.eventsql.internal;
 
-import com.binaryigor.eventsql.*;
+import com.binaryigor.eventsql.Event;
+import com.binaryigor.eventsql.EventSQLConsumers;
+import com.binaryigor.eventsql.EventSQLConsumptionException;
+import com.binaryigor.eventsql.EventSQLPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,87 +18,33 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
-// TODO: support topic & consumer definitions reloading
-public class EventSQLOps implements EventSQLPublisher, EventSQLConsumers {
+// TODO: support consumer definitions reloading
+public class DefaultEventSQLConsumers implements EventSQLConsumers {
 
-    private static final Logger logger = LoggerFactory.getLogger(EventSQLOps.class);
+    private static final Logger logger = LoggerFactory.getLogger(DefaultEventSQLConsumers.class);
     private final AtomicBoolean running = new AtomicBoolean(true);
-    private final TopicDefinitionsCache topicDefinitionsCache;
     private final Transactions transactions;
     private final ConsumerRepository consumerRepository;
     private final EventRepository eventRepository;
+    private final EventSQLPublisher publisher;
     private final Clock clock;
     private final Map<ConsumerId, Thread> consumerThreads = new ConcurrentHashMap<>();
-    private Partitioner partitioner;
     private DLTEventFactory dltEventFactory;
 
-    public EventSQLOps(TopicDefinitionsCache topicDefinitionsCache,
-                       Transactions transactions,
-                       ConsumerRepository consumerRepository,
-                       EventRepository eventRepository,
-                       Clock clock) {
-        this.topicDefinitionsCache = topicDefinitionsCache;
+
+    public DefaultEventSQLConsumers(TopicDefinitionsCache topicDefinitionsCache,
+                                    Transactions transactions,
+                                    ConsumerRepository consumerRepository,
+                                    EventRepository eventRepository,
+                                    EventSQLPublisher publisher,
+                                    Clock clock) {
         this.transactions = transactions;
         this.consumerRepository = consumerRepository;
         this.eventRepository = eventRepository;
+        this.publisher = publisher;
         this.clock = clock;
-        this.partitioner = new DefaultPartitioner();
         this.dltEventFactory = new DefaultDLTEventFactory(topicDefinitionsCache);
-    }
-
-    @Override
-    public void publish(EventPublication publication) {
-        publish(publication.topic(), List.of(publication));
-    }
-
-    @Override
-    public void publishAll(Collection<EventPublication> publications) {
-        var publicationsByTopic = publications.stream()
-                .collect(Collectors.groupingBy(EventPublication::topic));
-        transactions.execute(() -> publicationsByTopic.forEach(this::publish));
-    }
-
-    private void publish(String topicName, Collection<EventPublication> publications) {
-        var topic = findTopicDefinition(topicName);
-        var toCreateEvents = publications.stream()
-                .map(publication -> {
-                    var partition = (short) partitioner.partition(publication, topic.partitions());
-                    var eventInput = new EventInput(publication, partition);
-                    validateNewEvent(eventInput, topic);
-                    return eventInput;
-                })
-                .toList();
-        eventRepository.createAll(toCreateEvents);
-    }
-
-    private void validateNewEvent(EventInput publication, TopicDefinition topic) {
-        if (publication.partition() < -1) {
-            throw new IllegalArgumentException("Illegal partition value: " + publication.partition());
-        } else if (topic.partitions() == -1 && publication.partition() != -1) {
-            throw new IllegalArgumentException("%s topic is not partitioned, but publication to %d partition was requested"
-                    .formatted(topic.name(), publication.partition()));
-            // partitions are numbered from 0
-        } else if (topic.partitions() > -1 && (publication.partition() + 1) > topic.partitions()) {
-            throw new IllegalArgumentException("%s topic has only %d partitions, but publishing to %d was requested"
-                    .formatted(topic.name(), topic.partitions(), publication.partition()));
-        }
-    }
-
-    private TopicDefinition findTopicDefinition(String name) {
-        return topicDefinitionsCache.getLoadingIf(name)
-                .orElseThrow(() -> new IllegalArgumentException("topic of %s name doesn't exist".formatted(name)));
-    }
-
-    @Override
-    public void configurePartitioner(Partitioner partitioner) {
-        this.partitioner = partitioner;
-    }
-
-    @Override
-    public Partitioner partitioner() {
-        return partitioner;
     }
 
     @Override
@@ -183,7 +131,7 @@ public class EventSQLOps implements EventSQLPublisher, EventSQLConsumers {
             if (dltEvent.isPresent()) {
                 logger.error("Problem while consuming event for {} consumer, publishing it to dlt: ", consumerId, e);
                 lastEventId = e.event().id();
-                publish(dltEvent.get());
+                publisher.publish(dltEvent.get());
                 delayNextPolling = false;
             } else {
                 logger.error("Problem while consuming event for {} consumer: ", consumerId, e);
@@ -229,19 +177,19 @@ public class EventSQLOps implements EventSQLPublisher, EventSQLConsumers {
         }
     }
 
-    // TODO: refactor
+    @Override
     public void stop(Duration timeout) {
         logger.info("Stopping consumers...");
         running.set(false);
         var latch = waitForConsumersToFinishAsync();
         try {
             if (latch.await(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
-                logger.info("All consumers have stopped gracefully!");
+                logger.info("Consumers have stopped gracefully!");
             } else {
                 logger.warn("Some consumers didn't finish in {}, exiting in any case", timeout);
             }
         } catch (Exception e) {
-            logger.error("Problem while stopping consumers", e);
+            logger.error("Problem while stopping consumers:", e);
         }
     }
 
@@ -258,7 +206,7 @@ public class EventSQLOps implements EventSQLPublisher, EventSQLConsumers {
                     break;
                 } else {
                     try {
-                        logger.info("Some consumers are still alive, waiting for them to finish: {}", aliveConsumers);
+                        logger.info("Some consumers ({}) are still alive, waiting for them to finish...", aliveConsumers);
                         Thread.sleep(500);
                     } catch (InterruptedException e) {
                         throw new RuntimeException(e);

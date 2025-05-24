@@ -51,21 +51,21 @@ public abstract class IntegrationTest {
     static void initDbSchema(DSLContext dslContext) {
         dslContext.execute("""
                 CREATE TABLE topic (
-                    name TEXT PRIMARY KEY,
-                    partitions SMALLINT NOT NULL,
-                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                  name TEXT PRIMARY KEY,
+                  partitions SMALLINT NOT NULL,
+                  created_at TIMESTAMP NOT NULL DEFAULT NOW()
                 );
                 
                 CREATE TABLE consumer (
-                    topic TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    partition SMALLINT NOT NULL,
-                    first_event_id BIGINT,
-                    last_event_id BIGINT,
-                    last_consumption_at TIMESTAMP,
-                    consumed_events BIGINT NOT NULL,
-                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                    PRIMARY KEY (topic, name, partition)
+                  topic TEXT NOT NULL,
+                  name TEXT NOT NULL,
+                  partition SMALLINT NOT NULL,
+                  first_event_id BIGINT,
+                  last_event_id BIGINT,
+                  last_consumption_at TIMESTAMP,
+                  consumed_events BIGINT NOT NULL,
+                  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                  PRIMARY KEY (topic, name, partition)
                 );
                 """);
     }
@@ -78,15 +78,33 @@ public abstract class IntegrationTest {
         dslContext.execute("""
                  DROP TABLE IF EXISTS event;
                  CREATE TABLE event (
-                    topic TEXT NOT NULL,
-                    id BIGSERIAL NOT NULL,
-                    partition SMALLINT NOT NULL,
-                    key TEXT,
-                    value BYTEA NOT NULL,
-                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                    metadata JSON NOT NULL,
-                    PRIMARY KEY (topic, id)
+                   topic TEXT NOT NULL,
+                   id BIGSERIAL NOT NULL,
+                   partition SMALLINT NOT NULL,
+                   key TEXT,
+                   value BYTEA NOT NULL,
+                   buffered_at TIMESTAMP NOT NULL,
+                   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                   metadata JSON NOT NULL,
+                   PRIMARY KEY (topic, id)
                 ) PARTITION BY LIST(topic);
+                
+                DROP TABLE IF EXISTS event_buffer;
+                CREATE TABLE event_buffer (
+                  topic TEXT NOT NULL,
+                  id BIGSERIAL PRIMARY KEY,
+                  partition SMALLINT NOT NULL,
+                  key TEXT,
+                  value BYTEA NOT NULL,
+                  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                  metadata JSON NOT NULL
+                );
+                
+                DROP TABLE IF EXISTS event_buffer_lock;
+                CREATE TABLE event_buffer_lock (
+                  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                );
+                INSERT INTO event_buffer_lock (created_at) VALUES (DEFAULT);
                 """);
     }
 
@@ -110,26 +128,27 @@ public abstract class IntegrationTest {
         dltEventFactory = eventSQL.consumers().dltEventFactory();
 
         var transactions = new SQLTransactions(dslContext);
-        eventRepository = new SQLEventRepository(transactions, EventSQL.Dialect.POSTGRES, 0);
+        eventRepository = new SQLEventRepository(transactions, transactions, EventSQLDialect.POSTGRES);
         consumerRepository = new SQLConsumerRepository(transactions);
 
         cleanDb(dslContext, registry);
     }
 
     protected EventSQL newEventSQLInstance() {
-        return new EventSQL(List.of(new EventSQL.DataSource(EventSQL.Dialect.POSTGRES, dataSource)), testClock);
+        return new EventSQL(dataSource, EventSQLDialect.POSTGRES, testClock);
     }
 
     @AfterEach
     protected void baseTearDown() {
+        publisher.stop(Duration.ofSeconds(3));
         consumers.stop(Duration.ofSeconds(3));
     }
 
     protected List<Event> publishedEvents(String topic) {
-        return eventRepository.nextEvents(topic, null, null, 0, Integer.MAX_VALUE);
+        return eventRepository.nextEvents(topic, null, null, Integer.MAX_VALUE);
     }
 
-    protected void delay(int millis) {
+    protected void delay(long millis) {
         try {
             Thread.sleep(millis);
         } catch (Exception e) {
@@ -137,7 +156,15 @@ public abstract class IntegrationTest {
         }
     }
 
-    protected void nextEventsVisibilityDelay() {
-        delay(EventSQL.NEXT_EVENTS_READ_VISIBILITY_THRESHOLD);
+    protected void flushPublishBuffer() {
+        var flushed = eventRepository.flushBuffer(Short.MAX_VALUE);
+        if (flushed == 0) {
+            // if flush was in progress, wait arbitrary amount of time for it to finish
+            delay(100);
+        }
+    }
+
+    protected int eventsBufferCount() {
+        return dslContext.fetchCount(DSL.table("event_buffer"));
     }
 }

@@ -1,10 +1,15 @@
 package com.binaryigor.eventsql.benchmarks;
 
 import com.binaryigor.eventsql.EventSQL;
+import com.binaryigor.eventsql.EventSQLDialect;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+
+import javax.sql.DataSource;
 
 @SpringBootApplication
 @EnableConfigurationProperties(EventsProperties.class)
@@ -16,11 +21,20 @@ public class EventSQLBenchmarksApp {
 
     @Bean
     EventSQL eventSQL(EventsProperties eventsProperties) {
-        var dataSourceProperties = eventsProperties.dataSources().stream()
+        var dataSources = eventsProperties.dataSources().stream()
                 .filter(EventsProperties.DataSourceProperties::enabled)
-                .map(ps -> new EventSQL.DataSourceProperties(EventSQL.Dialect.POSTGRES,
-                        ps.url(), ps.username(), ps.password()))
+                .map(this::dataSource)
                 .toList();
-        return EventSQL.of(dataSourceProperties);
+        return new EventSQL(dataSources, EventSQLDialect.POSTGRES);
+    }
+
+    private DataSource dataSource(EventsProperties.DataSourceProperties properties) {
+        var config = new HikariConfig();
+        config.setJdbcUrl(properties.url());
+        config.setUsername(properties.username());
+        config.setPassword(properties.password());
+        config.setMinimumIdle(properties.connections());
+        config.setMaximumPoolSize(properties.connections());
+        return new HikariDataSource(config);
     }
 }

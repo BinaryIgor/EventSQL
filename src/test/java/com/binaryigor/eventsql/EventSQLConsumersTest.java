@@ -42,7 +42,7 @@ public class EventSQLConsumersTest extends IntegrationTest {
         var event1 = TestObjects.randomEventPublication(TOPIC);
         var event2 = TestObjects.randomEventPublication(TOPIC);
         var event3 = TestObjects.randomEventPublication(TOPIC);
-        var capturedEvents = new ArrayList<Event>();
+        var capturedEvents = new CopyOnWriteArrayList<Event>();
 
         // when
         consumers.startConsumer(consumer.topic(), consumer.name(), capturedEvents::add);
@@ -127,7 +127,7 @@ public class EventSQLConsumersTest extends IntegrationTest {
         // given
         var consumer = new ConsumerDefinition(TOPIC, "test-consumer", false);
         registry.registerConsumer(consumer);
-        var capturedBatches = new ArrayList<Collection<Event>>();
+        var capturedBatches = new CopyOnWriteArrayList<Collection<Event>>();
         var event = TestObjects.randomEventPublication(TOPIC);
 
         // when
@@ -159,7 +159,7 @@ public class EventSQLConsumersTest extends IntegrationTest {
         var eventsToPublish = Stream.generate(() -> TestObjects.randomEventPublication(TOPIC))
                 .limit(50)
                 .toList();
-        var capturedEvents = new ArrayList<Event>();
+        var capturedEvents = new CopyOnWriteArrayList<Event>();
 
         eventSQLInstances.getFirst()
                 .registry()
@@ -197,9 +197,9 @@ public class EventSQLConsumersTest extends IntegrationTest {
         publisher.publish(event1);
         publisher.publish(event2);
         publisher.publish(event3);
+        flushPublishBuffer();
 
         // then
-        nextEventsVisibilityDelay();
         delay(100);
         assertThat(capturedEventKeys)
                 .containsOnly("event1", "event2Failure");

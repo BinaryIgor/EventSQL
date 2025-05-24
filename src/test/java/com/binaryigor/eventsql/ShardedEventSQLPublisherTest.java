@@ -29,6 +29,7 @@ public class ShardedEventSQLPublisherTest extends ShardedIntegrationTest {
         var toPublishEvents = 50;
         IntStream.range(0, toPublishEvents)
                 .forEach($ -> publisher.publish(TestObjects.randomEventPublication(PARTITIONED_TOPIC)));
+        flushPublishBuffers();
 
         // then
         var allPublishedEvents = new AtomicInteger();
@@ -53,6 +54,7 @@ public class ShardedEventSQLPublisherTest extends ShardedIntegrationTest {
                             .toList();
                     publisher.publishAll(batch);
                 });
+        flushPublishBuffers();
 
         // then
         var allPublishedEvents = new AtomicInteger();

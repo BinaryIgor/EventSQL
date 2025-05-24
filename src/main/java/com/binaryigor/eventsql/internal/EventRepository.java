@@ -15,6 +15,8 @@ public interface EventRepository {
 
     void createAll(Collection<EventInput> events);
 
+    int flushBuffer(int toFlush);
+
     List<Event> nextEvents(String topic, Long lastId, int limit);
 
     List<Event> nextEvents(String topic, int partition, Long lastId, int limit);

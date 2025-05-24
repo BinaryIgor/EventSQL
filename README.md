@@ -12,7 +12,7 @@ For scalability details, see [benchmarks](/benchmarks/README.md).
 
 ## How it works
 
-We just need to have three tables (postgres syntax):
+We just need to have a few tables (postgres syntax):
 
 ```sql
 CREATE TABLE topic (
@@ -20,17 +20,6 @@ CREATE TABLE topic (
   partitions SMALLINT NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
-
-CREATE TABLE event (
-  topic TEXT NOT NULL,
-  id BIGSERIAL NOT NULL,
-  partition SMALLINT NOT NULL,
-  key TEXT,
-  value BYTEA NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  metadata JSON NOT NULL,
-  PRIMARY KEY (topic, id)
-) PARTITION BY LIST (topic);
 
 CREATE TABLE consumer (
   topic TEXT NOT NULL,
@@ -43,6 +32,40 @@ CREATE TABLE consumer (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   PRIMARY KEY (topic, name, partition)
 );
+
+CREATE TABLE event (
+  topic TEXT NOT NULL,
+  id BIGSERIAL NOT NULL,
+  partition SMALLINT NOT NULL,
+  key TEXT,
+  value BYTEA NOT NULL,
+  buffered_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  metadata JSON NOT NULL,
+  PRIMARY KEY (topic, id)
+) PARTITION BY LIST (topic);
+
+-- Same schema as event, just not partitioned. --
+-- It is used to handle eventual consistency of auto increment; --
+-- there is no guarantee that record of id 2 is visible after id 1 record. --
+-- Events are first inserted to the event_buffer; --
+-- they are then moved to event table in bulk, by a single, serialized writer; --
+-- because there is only one writer, it fixes eventual consistency issue --
+CREATE TABLE event_buffer (
+  topic TEXT NOT NULL,
+  id BIGSERIAL PRIMARY KEY,
+  partition SMALLINT NOT NULL,
+  key TEXT,
+  value BYTEA NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  metadata JSON NOT NULL
+);
+-- Used to lock single event_buffer to event writer; --
+-- there cannot be more than one record of this table! --
+CREATE TABLE event_buffer_lock (
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+INSERT INTO event_buffer_lock VALUES (DEFAULT);
 ```
 
 To consume messages, we just need to periodically (every one to a few seconds) do:
@@ -56,9 +79,6 @@ FOR UPDATE SKIP LOCKED;
 
 SELECT * FROM event
 WHERE topic = :topic AND (:last_event_id IS NULL OR id > :last_event_id)
-  -- eventual consistency of auto increment; there is no guarantee that record of id 2 is visible after id 1 record --
-  -- in the implementation, we set insert statements timeout to '250 ms' so it is safe --
-  AND created_at < (NOW() - interval '333 ms')
 ORDER BY id LIMIT :limit;
 
 (process events)
@@ -74,7 +94,7 @@ COMMIT;
 Optionally, to increase throughput & concurrency, we might have a partitioned topic and consumers (-1 partition standing
 for not partitioned topic/consumer/event).
 
-Distribution of partitioned events is the sole responsibility of the publisher.
+Distribution of partitioned events is the sole responsibility of a publisher.
 
 Consumption of such events per partition (0 in an example) might look like this:
 
@@ -87,9 +107,6 @@ FOR UPDATE SKIP LOCKED;
 
 SELECT * FROM event
 WHERE topic = :topic AND partition = 0 AND (:last_event_id IS NULL OR id > :last_event_id)
-  -- eventual consistency of auto increment; there is no guarantee that record of id 2 is visible after id 1 record --
-  -- in the implementation, we set insert statements timeout to '250 ms' so it is safe --
-  AND created_at < (NOW() - interval '333 ms')
 ORDER BY id LIMIT :limit;
 
 (process events)
@@ -107,20 +124,20 @@ definition has. It's a rather acceptable tradeoff and easy to enforce at the lib
 
 ## How to use it
 
-`EventSQL` is an entrypoint to the whole library. It requires single data source properties or a list of
+`EventSQL` is an entrypoint to the whole library. It requires standard Java `javax.sql.DataSource` or a list of
 them:
 
 ```java
+
 import com.binaryigor.eventsql.EventSQL;
-// EventSQL.Dialect is a dialect of your events backend - POSTGRES, MYSQL, MARIADB and so on;
+// dialect of your events backend - POSTGRES, MYSQL, MARIADB and so on;
 // as of now, only POSTGRES has fully tested support;
 // should also work with others but some things - event table partition management for example - works only with Postgres, for others it must be managed manually
-var eventSQL = EventSQL.of(new EventSQL.DataSourceProperties(EventSQL.Dialect.POSTGRES, "dbUrl", "dbUsername", "dbPassword"));
-ver shardedEventSQL = EventSQL.of(
-  List.of(
-    new EventSQL.DataSourceProperties(EventSQL.Dialect.POSTGRES, "db0Url", "db0Username", "db0Password"),
-    new EventSQL.DataSourceProperties(EventSQL.Dialect.POSTGRES, "db1Url", "db1Username", "db1Password"),
-    new EventSQL.DataSourceProperties(EventSQL.Dialect.POSTGRES, "db2Url", "db2Username", "db2Password")));
+import com.binaryigor.eventsql.EventSQLDialect;
+import javax.sql.DataSource;
+
+var eventSQL = new EventSQL(dataSource, EventSQLDialect.POSTGRES);
+ver shardedEventSQL = new EventSQL(dataSources, EventSQLDialect.POSTGRES);
 ```
 
 Sharded version works in the same vain - it just assumes that topics and consumers are hosted on multiple dbs.
@@ -231,7 +248,7 @@ var consumers = eventSQL.consumers();
 consumers.startConsumer("txt_topic", "single-consumer", event -> {
   // handle single event
 });
-// with more frequent polling - by default it is 1 second
+// with more frequent polling - by default it is 0.5 second
 consumers.startConsumer("txt_topic", "single-consumer-customized", event -> {
   // handle single event
 }, Duration.ofMillis(100));
