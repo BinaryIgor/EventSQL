@@ -156,6 +156,6 @@ public class DefaultEventSQLRegistry implements EventSQLRegistry {
     }
 
     private Consumer toConsumer(ConsumerDefinition registration, int partition) {
-        return new Consumer(registration.topic(), registration.name(), partition, null, null);
+        return new Consumer(registration.topic(), registration.name(), partition, null, null, null, 0);
     }
 }

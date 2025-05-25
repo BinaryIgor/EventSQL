@@ -13,17 +13,19 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public class SqlConsumerRepository implements ConsumerRepository {
+public class SQLConsumerRepository implements ConsumerRepository {
 
     private static final Table<?> CONSUMER = DSL.table("consumer");
     private static final Field<String> TOPIC = DSL.field("topic", String.class);
     private static final Field<String> NAME = DSL.field("name", String.class);
     private static final Field<Short> PARTITION = DSL.field("partition", Short.class);
+    private static final Field<Long> FIRST_EVENT_ID = DSL.field("first_event_id", Long.class);
     private static final Field<Long> LAST_EVENT_ID = DSL.field("last_event_id", Long.class);
     private static final Field<Instant> LAST_CONSUMPTION_AT = DSL.field("last_consumption_at", Instant.class);
-    private final DslContextProvider contextProvider;
+    private static final Field<Long> CONSUMED_EVENTS = DSL.field("consumed_events", Long.class);
+    private final DSLContextProvider contextProvider;
 
-    public SqlConsumerRepository(DslContextProvider contextProvider) {
+    public SQLConsumerRepository(DSLContextProvider contextProvider) {
         this.contextProvider = contextProvider;
     }
 
@@ -39,14 +41,16 @@ public class SqlConsumerRepository implements ConsumerRepository {
         }
         var insert = contextProvider.get()
                 .insertInto(CONSUMER)
-                .columns(TOPIC, NAME, PARTITION, LAST_EVENT_ID, LAST_CONSUMPTION_AT);
+                .columns(TOPIC, NAME, PARTITION, FIRST_EVENT_ID, LAST_EVENT_ID, LAST_CONSUMPTION_AT, CONSUMED_EVENTS);
 
-        consumers.forEach(c -> insert.values(c.topic(), c.name(), (short) c.partition(), c.lastEventId(), c.lastConsumptionAt()));
+        consumers.forEach(c -> insert.values(c.topic(), c.name(), (short) c.partition(), c.firstEventId(), c.lastEventId(), c.lastConsumptionAt(), c.consumedEvents()));
 
         insert.onConflict(TOPIC, NAME, PARTITION)
                 .doUpdate()
+                .set(FIRST_EVENT_ID, DSL.excluded(FIRST_EVENT_ID))
                 .set(LAST_EVENT_ID, DSL.excluded(LAST_EVENT_ID))
                 .set(LAST_CONSUMPTION_AT, DSL.excluded(LAST_CONSUMPTION_AT))
+                .set(CONSUMED_EVENTS, DSL.excluded(CONSUMED_EVENTS))
                 .execute();
     }
 
@@ -57,7 +61,7 @@ public class SqlConsumerRepository implements ConsumerRepository {
 
     private List<Consumer> allOf(Condition condition) {
         return contextProvider.get()
-                .select(TOPIC, NAME, PARTITION, LAST_EVENT_ID, LAST_CONSUMPTION_AT)
+                .select(TOPIC, NAME, PARTITION, FIRST_EVENT_ID, LAST_EVENT_ID, LAST_CONSUMPTION_AT, CONSUMED_EVENTS)
                 .from(CONSUMER)
                 .where(condition)
                 .fetchInto(Consumer.class);
@@ -76,7 +80,7 @@ public class SqlConsumerRepository implements ConsumerRepository {
     @Override
     public Optional<Consumer> ofIdForUpdateSkippingLocked(ConsumerId id) {
         return contextProvider.get()
-                .select(TOPIC, NAME, PARTITION, LAST_EVENT_ID, LAST_CONSUMPTION_AT)
+                .select(TOPIC, NAME, PARTITION, FIRST_EVENT_ID, LAST_EVENT_ID, LAST_CONSUMPTION_AT, CONSUMED_EVENTS)
                 .from(CONSUMER)
                 .where(TOPIC.eq(id.topic())
                         .and(NAME.eq(id.name()))
@@ -87,14 +91,16 @@ public class SqlConsumerRepository implements ConsumerRepository {
     }
 
     @Override
-    public void update(ConsumerId id, long lastEventId, Instant lastConsumptionAt) {
+    public void update(Consumer consumer) {
         contextProvider.get()
                 .update(CONSUMER)
-                .set(LAST_EVENT_ID, lastEventId)
-                .set(LAST_CONSUMPTION_AT, lastConsumptionAt)
-                .where(TOPIC.eq(id.topic())
-                        .and(NAME.eq(id.name()))
-                        .and(PARTITION.eq((short) id.partition())))
+                .set(FIRST_EVENT_ID, consumer.firstEventId())
+                .set(LAST_EVENT_ID, consumer.lastEventId())
+                .set(LAST_CONSUMPTION_AT, consumer.lastConsumptionAt())
+                .set(CONSUMED_EVENTS, consumer.consumedEvents())
+                .where(TOPIC.eq(consumer.topic())
+                        .and(NAME.eq(consumer.name()))
+                        .and(PARTITION.eq((short) consumer.partition())))
                 .execute();
     }
 

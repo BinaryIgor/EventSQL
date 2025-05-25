@@ -3,6 +3,7 @@ package com.binaryigor.eventsql.internal.sharded;
 import com.binaryigor.eventsql.EventPublication;
 import com.binaryigor.eventsql.EventSQLPublisher;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Random;
@@ -38,6 +39,21 @@ public class ShardedEventSQLPublisher implements EventSQLPublisher {
     @Override
     public Partitioner partitioner() {
         return publishers.getFirst().partitioner();
+    }
+
+    @Override
+    public void stop(Duration timeout) {
+        var stopThreads = publishers.stream()
+                .map(p -> Thread.startVirtualThread(() -> p.stop(timeout)))
+                .toList();
+
+        stopThreads.forEach(t -> {
+            try {
+                t.join();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     public List<EventSQLPublisher> publishers() {

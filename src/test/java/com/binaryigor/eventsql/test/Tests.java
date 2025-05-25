@@ -3,7 +3,7 @@ package com.binaryigor.eventsql.test;
 public class Tests {
 
     public static void awaitAssertion(Runnable assertion) {
-        awaitAssertion(assertion, 5000);
+        awaitAssertion(assertion, 2000);
     }
 
     public static void awaitAssertion(Runnable assertion, int waitLimit) {

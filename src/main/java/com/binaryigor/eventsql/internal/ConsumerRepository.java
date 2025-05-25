@@ -1,6 +1,5 @@
 package com.binaryigor.eventsql.internal;
 
-import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -19,7 +18,7 @@ public interface ConsumerRepository {
 
     Optional<Consumer> ofIdForUpdateSkippingLocked(ConsumerId id);
 
-    void update(ConsumerId id, long lastEventId, Instant lastConsumptionAt);
+    void update(Consumer consumer);
 
     void deleteAllOf(String topic, String name);
 }

@@ -1,5 +1,6 @@
 package com.binaryigor.eventsql;
 
+import com.binaryigor.eventsql.internal.EventInput;
 import com.binaryigor.eventsql.test.IntegrationTest;
 import com.binaryigor.eventsql.test.TestObjects;
 import com.binaryigor.eventsql.test.TestPartitioner;
@@ -8,10 +9,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.util.List;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.binaryigor.eventsql.test.Tests.awaitAssertion;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
@@ -37,12 +38,13 @@ public class EventSQLPublisherTest extends IntegrationTest {
 
         // when
         events.forEach(publisher::publish);
+        flushPublishBuffer();
 
         // then
         var expectedKeyPartitions = events.stream()
                 .map(e -> tuple(e.key(), publisher.partitioner().partition(e, TOPIC_PARTITIONS)))
                 .toList();
-        assertThat(publishedEvents())
+        assertThat(publishedEvents(PARTITIONED_TOPIC))
                 .extracting("key", "partition")
                 .containsExactlyElementsOf(expectedKeyPartitions);
     }
@@ -52,9 +54,10 @@ public class EventSQLPublisherTest extends IntegrationTest {
         // when
         IntStream.range(0, 25)
                 .forEach(idx -> publisher.publish(TestObjects.randomEventPublication(PARTITIONED_TOPIC)));
+        flushPublishBuffer();
 
         // then
-        assertThat(publishedEvents())
+        assertThat(publishedEvents(PARTITIONED_TOPIC))
                 .extracting("partition")
                 .contains(0, 1, 2);
     }
@@ -66,9 +69,10 @@ public class EventSQLPublisherTest extends IntegrationTest {
                 .limit(50)
                 .toList();
         publisher.publishAll(toPublishEvents);
+        flushPublishBuffer();
 
         // then
-        assertThat(publishedEvents())
+        assertThat(publishedEvents(PARTITIONED_TOPIC))
                 .extracting("partition")
                 .contains(0, 1, 2);
     }
@@ -117,7 +121,73 @@ public class EventSQLPublisherTest extends IntegrationTest {
                         .formatted(3, outsideValue));
     }
 
-    private List<Event> publishedEvents() {
-        return eventRepository.nextEvents(PARTITIONED_TOPIC, null, Integer.MAX_VALUE);
+    @Test
+    void doesNotFlushEventsBufferUnlessPublishIsCalled() {
+        // given
+        var eventsBufferSize = 5;
+        fillEventsBuffer(eventsBufferSize);
+        assertThat(eventsBufferCount()).isEqualTo(eventsBufferSize);
+
+        // when
+        delayAfterNextPublishBufferFlush();
+        assertThat(eventsBufferCount()).isEqualTo(eventsBufferSize);
+        // and only when publish is called
+        publisher.publish(TestObjects.randomEventPublication(PARTITIONED_TOPIC));
+
+        // then flushing is triggered
+        awaitAssertion(() -> {
+            assertThat(eventsBufferCount()).isZero();
+            assertThat(publishedEvents(PARTITIONED_TOPIC)).hasSize(eventsBufferSize + 1);
+        });
+    }
+
+    @Test
+    void eventsBufferFlushIsTriggeredOncePerPublishCall() {
+        // when
+        publisher.publish(TestObjects.randomEventPublication(PARTITIONED_TOPIC));
+
+        // then flushing is triggered
+        awaitAssertion(() -> {
+            assertThat(eventsBufferCount()).isZero();
+            assertThat(publishedEvents(PARTITIONED_TOPIC)).hasSize(1);
+        });
+
+        // and given events created outside publisher
+        var eventsBufferSize = 10;
+        fillEventsBuffer(eventsBufferSize);
+        assertThat(eventsBufferCount()).isEqualTo(eventsBufferSize);
+
+        // when
+        delayAfterNextPublishBufferFlush();
+
+        // then flushing is not triggered
+        awaitAssertion(() -> {
+            assertThat(eventsBufferCount()).isEqualTo(eventsBufferSize);
+            assertThat(publishedEvents(PARTITIONED_TOPIC)).hasSize(1);
+        });
+
+        // and when publish is called again
+        publisher.publish(TestObjects.randomEventPublication(PARTITIONED_TOPIC));
+
+        // then flushing is triggered as well
+        awaitAssertion(() -> {
+            assertThat(eventsBufferCount()).isZero();
+            assertThat(publishedEvents(PARTITIONED_TOPIC)).hasSize(eventsBufferSize + 2);
+        });
+    }
+
+    private void fillEventsBuffer(int size) {
+        var eventsBuffer = Stream.generate(() -> {
+                    var publication = TestObjects.randomEventPublication(PARTITIONED_TOPIC);
+                    var partition = publisher.partitioner().partition(publication, TOPIC_PARTITIONS);
+                    return new EventInput(publication, (short) partition);
+                })
+                .limit(size)
+                .toList();
+        eventRepository.createAll(eventsBuffer);
+    }
+
+    private void delayAfterNextPublishBufferFlush() {
+        delay(EventSQL.DEFAULT_FLUSH_PUBLISH_BUFFER_DELAY.toMillis() + 100);
     }
 }

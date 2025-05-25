@@ -33,7 +33,7 @@ export tag=$tag
 export run_cmd="docker run -d \\
   -e \"POSTGRES_USER=postgres\" -e \"POSTGRES_PASSWORD=postgres\" \\
    --memory ${memory_limit} --cpus ${cpus_limit} \
-  --network host ${volume} --restart unless-stopped --name $app $tagged_image"
+  --network host ${volume} --name $app $tagged_image"
 
 cd ..
 envsubst '${app} ${tag}' < scripts/template_load_and_run_app.bash > "$app/dist/load_and_run_app.bash"

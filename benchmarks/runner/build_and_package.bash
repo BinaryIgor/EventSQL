@@ -31,7 +31,7 @@ export app=$app
 export tag=$tag
 export run_cmd="docker run -d \\
   -e EVENTS_RATE -e EVENTS_TO_PUBLISH -e RUNNER_INSTANCES \\
-  --memory 2G --cpus 2 \\
+  --memory 2G --cpus 4 \\
   --network host \\
   --name $app $tagged_image"
 

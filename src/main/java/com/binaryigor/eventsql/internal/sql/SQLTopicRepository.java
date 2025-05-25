@@ -9,14 +9,14 @@ import org.jooq.impl.DSL;
 import java.util.List;
 import java.util.Optional;
 
-public class SqlTopicRepository implements TopicRepository {
+public class SQLTopicRepository implements TopicRepository {
 
     private static final Table<?> TOPIC = DSL.table("topic");
     private static final Field<String> NAME = DSL.field("name", String.class);
     private static final Field<Short> PARTITIONS = DSL.field("partitions", Short.class);
-    private final DslContextProvider contextProvider;
+    private final DSLContextProvider contextProvider;
 
-    public SqlTopicRepository(DslContextProvider contextProvider) {
+    public SQLTopicRepository(DSLContextProvider contextProvider) {
         this.contextProvider = contextProvider;
     }
 

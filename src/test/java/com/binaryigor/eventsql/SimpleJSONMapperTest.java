@@ -1,16 +1,16 @@
 package com.binaryigor.eventsql;
 
-import com.binaryigor.eventsql.internal.sql.SimpleJsonMapper;
+import com.binaryigor.eventsql.internal.sql.SimpleJSONMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
 
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
-public class SimpleJsonMapperTest {
+public class SimpleJSONMapperTest {
 
     @Test
-    void mapsToJson() {
+    void mapsToJSON() {
         var input = new LinkedHashMap<String, String>();
         input.put("id", "1");
         input.put("name", "some-name");
@@ -26,7 +26,7 @@ public class SimpleJsonMapperTest {
                 }
                 """.trim();
 
-        assertThat(SimpleJsonMapper.toJson(input))
+        assertThat(SimpleJSONMapper.toJSON(input))
                 .isEqualTo(expectedJson);
     }
 }

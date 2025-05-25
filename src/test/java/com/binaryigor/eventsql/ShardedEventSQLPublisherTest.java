@@ -29,11 +29,12 @@ public class ShardedEventSQLPublisherTest extends ShardedIntegrationTest {
         var toPublishEvents = 50;
         IntStream.range(0, toPublishEvents)
                 .forEach($ -> publisher.publish(TestObjects.randomEventPublication(PARTITIONED_TOPIC)));
+        flushPublishBuffers();
 
         // then
         var allPublishedEvents = new AtomicInteger();
         assertOnEachShard(shard -> {
-            var publishedEvents = publishedEvents(shard);
+            var publishedEvents = publishedEvents(shard, PARTITIONED_TOPIC);
             assertThat(publishedEvents).isNotEmpty();
             allPublishedEvents.addAndGet(publishedEvents.size());
         });
@@ -53,11 +54,12 @@ public class ShardedEventSQLPublisherTest extends ShardedIntegrationTest {
                             .toList();
                     publisher.publishAll(batch);
                 });
+        flushPublishBuffers();
 
         // then
         var allPublishedEvents = new AtomicInteger();
         assertOnEachShard(shard -> {
-            var publishedEvents = publishedEvents(shard);
+            var publishedEvents = publishedEvents(shard, PARTITIONED_TOPIC);
             assertThat(publishedEvents).isNotEmpty();
             allPublishedEvents.addAndGet(publishedEvents.size());
         });
@@ -83,9 +85,5 @@ public class ShardedEventSQLPublisherTest extends ShardedIntegrationTest {
     private void assertOnEachShard(Consumer<Integer> shardAssertion) {
         IntStream.range(0, SHARDS)
                 .forEach(shardAssertion::accept);
-    }
-
-    private List<Event> publishedEvents(int shard) {
-        return eventRepositories.get(shard).nextEvents(PARTITIONED_TOPIC, null, Integer.MAX_VALUE);
     }
 }

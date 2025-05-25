@@ -1,6 +1,6 @@
 package com.binaryigor.eventsql;
 
-import com.binaryigor.eventsql.internal.sql.SqlTransactions;
+import com.binaryigor.eventsql.internal.sql.SQLTransactions;
 import com.binaryigor.eventsql.test.IntegrationTest;
 import org.jooq.DSLContext;
 import org.junit.jupiter.api.Test;
@@ -10,9 +10,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
-public class SqlTransactionsTest extends IntegrationTest {
+public class SQLTransactionsTest extends IntegrationTest {
 
-    private final SqlTransactions transactions = new SqlTransactions(dslContext);
+    private final SQLTransactions transactions = new SQLTransactions(dslContext);
 
     @Test
     void returnsGlobalContextNotInTransaction() {

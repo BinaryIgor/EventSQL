@@ -3,12 +3,12 @@ package com.binaryigor.eventsql.internal.sql;
 import com.binaryigor.eventsql.internal.Transactions;
 import org.jooq.DSLContext;
 
-public class SqlTransactions implements Transactions, DslContextProvider {
+public class SQLTransactions implements Transactions, DSLContextProvider {
 
     private final ThreadLocal<DSLContext> transactionContexts = new ThreadLocal<>();
     private final DSLContext context;
 
-    public SqlTransactions(DSLContext context) {
+    public SQLTransactions(DSLContext context) {
         this.context = context;
     }
 

@@ -3,9 +3,9 @@ package com.binaryigor.eventsql.internal.sql;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class SimpleJsonMapper {
+public class SimpleJSONMapper {
 
-    public static String toJson(Map<String, String> map) {
+    public static String toJSON(Map<String, String> map) {
         return map.entrySet().stream()
                 .map(e -> "  \"%s\": \"%s\"".formatted(e.getKey(), escaped(e.getValue())))
                 .collect(Collectors.joining(",\n", "{\n", "\n}"));

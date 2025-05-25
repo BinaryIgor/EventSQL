@@ -46,7 +46,7 @@ export run_cmd="docker run -d \\
   -e DB0_URL=\"$DB0_URL\" -e DB0_ENABLED=\"$DB0_ENABLED\" \\
   -e DB1_URL=\"$DB1_URL\" -e DB1_ENABLED=\"$DB1_ENABLED\" \\
   -e DB2_URL=\"$DB2_URL\" -e DB2_ENABLED=\"$DB2_ENABLED\" \\
-  --network host --restart unless-stopped \\
+  --network host \\
   --name $app $tagged_image"
 
 cd ..
