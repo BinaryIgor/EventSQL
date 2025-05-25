@@ -7,6 +7,8 @@ import java.util.Optional;
 
 public interface TopicRepository {
 
+    void createTable();
+
     void save(TopicDefinition topic);
 
     Optional<TopicDefinition> ofName(String name);

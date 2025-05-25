@@ -9,6 +9,7 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.jooq.DSLContext;
 import org.jooq.SQLDialect;
+import org.jooq.exception.DataAccessException;
 import org.jooq.impl.DSL;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +30,6 @@ public abstract class IntegrationTest {
         POSTGRES.start();
         dataSource = dataSource(POSTGRES);
         dslContext = dslContext(dataSource);
-        initDbSchema(dslContext);
     }
 
     static PostgreSQLContainer<?> postgreSQLContainer() {
@@ -48,64 +48,13 @@ public abstract class IntegrationTest {
         return DSL.using(dataSource, SQLDialect.POSTGRES);
     }
 
-    static void initDbSchema(DSLContext dslContext) {
-        dslContext.execute("""
-                CREATE TABLE topic (
-                  name TEXT PRIMARY KEY,
-                  partitions SMALLINT NOT NULL,
-                  created_at TIMESTAMP NOT NULL DEFAULT NOW()
-                );
-                
-                CREATE TABLE consumer (
-                  topic TEXT NOT NULL,
-                  name TEXT NOT NULL,
-                  partition SMALLINT NOT NULL,
-                  first_event_id BIGINT,
-                  last_event_id BIGINT,
-                  last_consumption_at TIMESTAMP,
-                  consumed_events BIGINT NOT NULL,
-                  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                  PRIMARY KEY (topic, name, partition)
-                );
-                """);
-    }
-
     static void cleanDb(DSLContext dslContext, EventSQLRegistry registry) {
         registry.listConsumers().forEach(c -> registry.unregisterConsumer(c.topic(), c.name()));
         registry.listTopics().forEach(t -> registry.unregisterTopic(t.name()));
-
-        // hard to clear/drop all partitions, so let's just recreate the table each time
         dslContext.execute("""
-                 DROP TABLE IF EXISTS event;
-                 CREATE TABLE event (
-                   topic TEXT NOT NULL,
-                   id BIGSERIAL NOT NULL,
-                   partition SMALLINT NOT NULL,
-                   key TEXT,
-                   value BYTEA NOT NULL,
-                   buffered_at TIMESTAMP NOT NULL,
-                   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                   metadata JSON NOT NULL,
-                   PRIMARY KEY (topic, id)
-                ) PARTITION BY LIST(topic);
-                
                 DROP TABLE IF EXISTS event_buffer;
-                CREATE TABLE event_buffer (
-                  topic TEXT NOT NULL,
-                  id BIGSERIAL PRIMARY KEY,
-                  partition SMALLINT NOT NULL,
-                  key TEXT,
-                  value BYTEA NOT NULL,
-                  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                  metadata JSON NOT NULL
-                );
-                
-                DROP TABLE IF EXISTS event_buffer_lock;
-                CREATE TABLE event_buffer_lock (
-                  created_at TIMESTAMP NOT NULL DEFAULT NOW()
-                );
-                INSERT INTO event_buffer_lock (created_at) VALUES (DEFAULT);
                 """);
+
     }
 
     protected TestClock testClock;
@@ -128,7 +77,7 @@ public abstract class IntegrationTest {
         dltEventFactory = eventSQL.consumers().dltEventFactory();
 
         var transactions = new SQLTransactions(dslContext);
-        eventRepository = new SQLEventRepository(transactions, transactions, EventSQLDialect.POSTGRES);
+        eventRepository = new SQLEventRepository(transactions, transactions);
         consumerRepository = new SQLConsumerRepository(transactions);
 
         cleanDb(dslContext, registry);
@@ -166,5 +115,14 @@ public abstract class IntegrationTest {
 
     protected int eventsBufferCount() {
         return dslContext.fetchCount(DSL.table("event_buffer"));
+    }
+
+    protected boolean eventTableExists(String topic) {
+        try {
+            dslContext.fetchCount(DSL.table(topic + "_event"));
+            return true;
+        } catch (DataAccessException e) {
+            return !e.getMessage().contains("relation") && !e.getMessage().contains("does not exist");
+        }
     }
 }

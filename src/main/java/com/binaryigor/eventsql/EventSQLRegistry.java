@@ -15,4 +15,20 @@ public interface EventSQLRegistry {
     EventSQLRegistry unregisterConsumer(String topic, String name);
 
     List<ConsumerDefinition> listConsumers();
+    
+    void configureTableManager(TableManager tableManager);
+    
+    TableManager tableManager();
+
+    // all methods must be idempotent
+    interface TableManager {
+        
+        void prepareTopicTable();
+        
+        void prepareConsumerTable();
+        
+        void prepareEventTable(String topic);
+        
+        void dropEventTable(String topic);
+    }
 }

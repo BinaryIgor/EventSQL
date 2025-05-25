@@ -99,6 +99,8 @@ public class EventSQLRegistryTest extends IntegrationTest {
         publisher.publish(TestObjects.randomEventPublication(topic.name()));
         publisher.publish(TestObjects.randomEventPublication(topic.name()));
         flushPublishBuffer();
+        assertThat(eventTableExists(topic.name()))
+                .isTrue();
         assertThat(topicEventsCount(topic.name()))
                 .isEqualTo(2);
 
@@ -108,8 +110,7 @@ public class EventSQLRegistryTest extends IntegrationTest {
         // then
         assertThat(registry.listTopics())
                 .doesNotContain(topic);
-        assertThat(topicEventsCount(topic.name()))
-                .isZero();
+        assertThat(eventTableExists(topic.name())).isFalse();
     }
 
     @Test

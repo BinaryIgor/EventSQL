@@ -128,7 +128,7 @@ public class EventSQLBenchmarksRunner {
     }
 
     static EventTableStats eventTableStats(DataSource source) {
-        return executeQuery(source, "SELECT partition, MAX(id) FROM event WHERE topic = '%s' GROUP BY partition"
+        return executeQuery(source, "SELECT partition, MAX(id) FROM %s_event GROUP BY partition"
                 .formatted(TEST_TOPIC), r -> {
             var lastIdsPerPartition = new HashMap<Integer, Long>();
             while (r.next()) {

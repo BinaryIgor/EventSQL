@@ -8,6 +8,7 @@ import org.jooq.Field;
 import org.jooq.Table;
 import org.jooq.impl.DSL;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -23,10 +24,27 @@ public class SQLConsumerRepository implements ConsumerRepository {
     private static final Field<Long> LAST_EVENT_ID = DSL.field("last_event_id", Long.class);
     private static final Field<Instant> LAST_CONSUMPTION_AT = DSL.field("last_consumption_at", Instant.class);
     private static final Field<Long> CONSUMED_EVENTS = DSL.field("consumed_events", Long.class);
+    private static final Field<Timestamp> CREATED_AT = DSL.field("created_at", Timestamp.class);
     private final DSLContextProvider contextProvider;
 
     public SQLConsumerRepository(DSLContextProvider contextProvider) {
         this.contextProvider = contextProvider;
+    }
+
+    @Override
+    public void createTable() {
+        contextProvider.get()
+                .createTableIfNotExists(CONSUMER)
+                .column(TOPIC, TOPIC.getDataType().notNull())
+                .column(NAME, NAME.getDataType().notNull())
+                .column(PARTITION, PARTITION.getDataType().notNull())
+                .column(FIRST_EVENT_ID)
+                .column(LAST_EVENT_ID)
+                .column(LAST_CONSUMPTION_AT)
+                .column(CONSUMED_EVENTS, CONSUMED_EVENTS.getDataType().notNull())
+                .column(CREATED_AT, CREATED_AT.getDataType().notNull().defaultValue(DSL.now()))
+                .constraint(DSL.constraint().primaryKey(TOPIC, NAME, PARTITION))
+                .execute();
     }
 
     @Override

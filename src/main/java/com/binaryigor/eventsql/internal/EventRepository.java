@@ -7,9 +7,13 @@ import java.util.List;
 
 public interface EventRepository {
 
+    void createBuffer();
+
+    void prepareBufferLock();
+
     void createPartition(String topic);
 
-    void deletePartition(String topic);
+    void dropPartition(String topic);
 
     void create(EventInput event);
 

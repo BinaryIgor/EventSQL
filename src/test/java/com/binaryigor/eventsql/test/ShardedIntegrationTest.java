@@ -34,8 +34,6 @@ public abstract class ShardedIntegrationTest {
 
         dataSources = List.of(dataSource(POSTGRES1), dataSource(POSTGRES2));
         dslContexts = dataSources.stream().map(IntegrationTest::dslContext).toList();
-
-        dslContexts.forEach(IntegrationTest::initDbSchema);
     }
 
     protected EventSQL eventSQL;
@@ -56,7 +54,7 @@ public abstract class ShardedIntegrationTest {
         dltEventFactory = eventSQL.consumers().dltEventFactory();
 
         var transactions = dslContexts.stream().map(SQLTransactions::new).toList();
-        eventRepositories = transactions.stream().map(t -> new SQLEventRepository(t, t, EventSQLDialect.POSTGRES)).toList();
+        eventRepositories = transactions.stream().map(t -> new SQLEventRepository(t, t)).toList();
 
         dslContexts.forEach(ctx -> cleanDb(ctx, registry));
     }

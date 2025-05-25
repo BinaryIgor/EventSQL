@@ -12,7 +12,7 @@ For scalability details, see [benchmarks](/benchmarks/README.md).
 
 ## How it works
 
-We just need to have a few tables (postgres syntax):
+We just need to have a few tables (postgres syntax, schema managed by EventSQL):
 
 ```sql
 CREATE TABLE topic (

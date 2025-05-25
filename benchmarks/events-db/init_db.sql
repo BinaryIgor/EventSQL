@@ -24,18 +24,6 @@ CREATE TABLE consumer (
   PRIMARY KEY (topic, name, partition)
 );
 
-CREATE TABLE event (
-  topic TEXT NOT NULL,
-  id BIGSERIAL NOT NULL,
-  partition SMALLINT NOT NULL,
-  key TEXT,
-  value BYTEA NOT NULL,
-  buffered_at TIMESTAMP NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  metadata JSON NOT NULL,
-  PRIMARY KEY (topic, id)
-) PARTITION BY LIST (topic);
-
 CREATE TABLE event_buffer (
   topic TEXT NOT NULL,
   id BIGSERIAL PRIMARY KEY,
