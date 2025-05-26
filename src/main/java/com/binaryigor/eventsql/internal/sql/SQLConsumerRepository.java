@@ -7,6 +7,7 @@ import org.jooq.Condition;
 import org.jooq.Field;
 import org.jooq.Table;
 import org.jooq.impl.DSL;
+import org.jooq.impl.SQLDataType;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -40,7 +41,7 @@ public class SQLConsumerRepository implements ConsumerRepository {
                 .column(PARTITION, PARTITION.getDataType().notNull())
                 .column(FIRST_EVENT_ID)
                 .column(LAST_EVENT_ID)
-                .column(LAST_CONSUMPTION_AT)
+                .column(LAST_CONSUMPTION_AT, SQLDataType.TIMESTAMP)
                 .column(CONSUMED_EVENTS, CONSUMED_EVENTS.getDataType().notNull())
                 .column(CREATED_AT, CREATED_AT.getDataType().notNull().defaultValue(DSL.now()))
                 .constraint(DSL.constraint().primaryKey(TOPIC, NAME, PARTITION))
@@ -61,7 +62,8 @@ public class SQLConsumerRepository implements ConsumerRepository {
                 .insertInto(CONSUMER)
                 .columns(TOPIC, NAME, PARTITION, FIRST_EVENT_ID, LAST_EVENT_ID, LAST_CONSUMPTION_AT, CONSUMED_EVENTS);
 
-        consumers.forEach(c -> insert.values(c.topic(), c.name(), (short) c.partition(), c.firstEventId(), c.lastEventId(), c.lastConsumptionAt(), c.consumedEvents()));
+        consumers.forEach(c -> insert.values(c.topic(), c.name(), (short) c.partition(),
+                c.firstEventId(), c.lastEventId(), c.lastConsumptionAt(), c.consumedEvents()));
 
         insert.onConflict(TOPIC, NAME, PARTITION)
                 .doUpdate()

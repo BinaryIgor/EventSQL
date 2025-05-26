@@ -7,7 +7,7 @@ import java.util.function.Consumer;
 
 public interface EventSQLConsumers {
 
-    Duration DEFAULT_POLLING_DELAY = Duration.ofMillis(500);
+    Duration DEFAULT_POLLING_DELAY = Duration.ofSeconds(1);
     int DEFAULT_IN_MEMORY_EVENTS = 10;
 
     void startConsumer(String topic, String name,
