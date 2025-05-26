@@ -9,8 +9,6 @@ public interface EventRepository {
 
     void createBuffer();
 
-    void prepareBufferLock();
-
     void createPartition(String topic);
 
     void dropPartition(String topic);
@@ -19,7 +17,7 @@ public interface EventRepository {
 
     void createAll(Collection<EventInput> events);
 
-    int flushBuffer(int toFlush);
+    int flushBuffer(Collection<String> topics, int toFlush);
 
     List<Event> nextEvents(String topic, Long lastId, int limit);
 

@@ -43,11 +43,11 @@ CREATE TABLE {topic}_event (
   metadata JSON NOT NULL
 );
 
--- Same schema as event, just not partitioned. --
+-- Same schema as event, just not partitioned (by topic). --
 -- It is used to handle eventual consistency of auto increment; --
 -- there is no guarantee that record of id 2 is visible after id 1 record. --
 -- Events are first inserted to the event_buffer; --
--- they are then moved to event table in bulk, by a single, serialized writer; --
+-- they are then moved to the {topic}_event table in bulk, by a single, serialized writer (per topic); --
 -- because there is only one writer, it fixes eventual consistency issue --
 CREATE TABLE event_buffer (
   id BIGSERIAL PRIMARY KEY,
@@ -58,12 +58,11 @@ CREATE TABLE event_buffer (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   metadata JSON NOT NULL
 );
--- Used to lock single event_buffer to event writer; --
--- there cannot be more than one record of this table! --
+CREATE INDEX event_buffer_topic_id ON event_buffer (topic, id);
+-- Used to lock single (per topic) event_buffer to {topic}_event writer --
 CREATE TABLE event_buffer_lock (
-  id TEXT PRIMARY KEY
+  topic TEXT PRIMARY KEY
 );
-INSERT INTO event_buffer_lock VALUES ('singleton-lock');
 ```
 
 To consume events, we just need to periodically (every one to a few seconds) do:
@@ -128,9 +127,8 @@ them:
 ```java
 
 import com.binaryigor.eventsql.EventSQL;
-// dialect of your events backend - POSTGRES, MYSQL, MARIADB and so on;
-// as of now, only POSTGRES has fully tested support;
-// should also work with others but some things - event table partition management for example - works only with Postgres, for others it must be managed manually
+// dialect of your events backend - POSTGRES, MYSQL, MARIADB;
+// as of now, only POSTGRES has fully tested support, but should work on others as well
 import com.binaryigor.eventsql.EventSQLDialect;
 import javax.sql.DataSource;
 
@@ -140,7 +138,7 @@ ver shardedEventSQL = new EventSQL(dataSources, EventSQLDialect.POSTGRES);
 
 Sharded version works in the same vain - it just assumes that topics and consumers are hosted on multiple dbs.
 
-Required tables are managed automatically by the library, but if you want to customize their schema a bit, you can provide your own `EventSQLRegistry.TableManager` implementation.
+Required tables are managed automatically by the library, but if you want to customize their schema a bit, you can provide your own `EventSQLRegistry.TablesManager` implementation.
 See `EventSQLRegistry` for details.
 
 ### Topics and Consumers

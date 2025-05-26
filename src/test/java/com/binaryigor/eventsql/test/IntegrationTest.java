@@ -105,8 +105,8 @@ public abstract class IntegrationTest {
         }
     }
 
-    protected void flushPublishBuffer() {
-        var flushed = eventRepository.flushBuffer(Short.MAX_VALUE);
+    protected void flushPublishBuffer(String topic) {
+        var flushed = eventRepository.flushBuffer(List.of(topic), Short.MAX_VALUE);
         if (flushed == 0) {
             // if flush was in progress, wait arbitrary amount of time for it to finish
             delay(100);

@@ -38,7 +38,7 @@ public class EventSQLPublisherTest extends IntegrationTest {
 
         // when
         events.forEach(publisher::publish);
-        flushPublishBuffer();
+        flushPublishBuffer(PARTITIONED_TOPIC);
 
         // then
         var expectedKeyPartitions = events.stream()
@@ -54,7 +54,7 @@ public class EventSQLPublisherTest extends IntegrationTest {
         // when
         IntStream.range(0, 25)
                 .forEach(idx -> publisher.publish(TestObjects.randomEventPublication(PARTITIONED_TOPIC)));
-        flushPublishBuffer();
+        flushPublishBuffer(PARTITIONED_TOPIC);
 
         // then
         assertThat(publishedEvents(PARTITIONED_TOPIC))
@@ -69,7 +69,7 @@ public class EventSQLPublisherTest extends IntegrationTest {
                 .limit(50)
                 .toList();
         publisher.publishAll(toPublishEvents);
-        flushPublishBuffer();
+        flushPublishBuffer(PARTITIONED_TOPIC);
 
         // then
         assertThat(publishedEvents(PARTITIONED_TOPIC))

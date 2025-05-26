@@ -17,7 +17,7 @@ public class DefaultEventSQLRegistry implements EventSQLRegistry {
     private final EventRepository eventRepository;
     private final ConsumerRepository consumerRepository;
     private final Transactions transactions;
-    private TableManager tableManager;
+    private TablesManager tablesManager;
 
     public DefaultEventSQLRegistry(TopicRepository topicRepository,
                                    EventRepository eventRepository,
@@ -27,14 +27,14 @@ public class DefaultEventSQLRegistry implements EventSQLRegistry {
         this.eventRepository = eventRepository;
         this.consumerRepository = consumerRepository;
         this.transactions = transactions;
-        this.tableManager = new DefaultTableManager(topicRepository, consumerRepository, eventRepository);
+        this.tablesManager = new DefaultTablesManager(topicRepository, consumerRepository, eventRepository);
 
         registerTables();
     }
 
     private void registerTables() {
-        tableManager.prepareTopicTable();
-        tableManager.prepareConsumerTable();
+        tablesManager.prepareTopicTable();
+        tablesManager.prepareConsumerTable();
     }
 
     // TODO: support more complex modifications
@@ -49,7 +49,7 @@ public class DefaultEventSQLRegistry implements EventSQLRegistry {
         if (currentTopicDefinitionOpt.isEmpty()) {
             transactions.execute(() -> {
                 topicRepository.save(topic);
-                tableManager.prepareEventTable(topic.name());
+                tablesManager.prepareEventTable(topic.name());
             });
             return this;
         }
@@ -81,7 +81,7 @@ public class DefaultEventSQLRegistry implements EventSQLRegistry {
             }
 
             topicRepository.delete(topic);
-            tableManager.dropEventTable(topic);
+            tablesManager.dropEventTable(topic);
         });
 
         return this;
@@ -101,7 +101,7 @@ public class DefaultEventSQLRegistry implements EventSQLRegistry {
                     .formatted(topic.name(), consumer.name()));
         }
 
-        tableManager.prepareConsumerTable();
+        tablesManager.prepareConsumerTable();
 
         var currentConsumers = consumerRepository.allOf(consumer.topic(), consumer.name());
         if (consumerDefinitionHaveNotChanged(currentConsumers, topic, consumer)) {
@@ -152,13 +152,13 @@ public class DefaultEventSQLRegistry implements EventSQLRegistry {
     }
 
     @Override
-    public void configureTableManager(TableManager tableManager) {
-        this.tableManager = tableManager;
+    public void configureTablesManager(TablesManager tablesManager) {
+        this.tablesManager = tablesManager;
     }
 
     @Override
-    public TableManager tableManager() {
-        return tableManager;
+    public TablesManager tablesManager() {
+        return tablesManager;
     }
 
     private TopicDefinition findTopicDefinition(String topic) {

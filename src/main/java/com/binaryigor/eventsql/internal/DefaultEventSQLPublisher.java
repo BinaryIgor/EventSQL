@@ -8,7 +8,10 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,6 +27,7 @@ public class DefaultEventSQLPublisher implements EventSQLPublisher {
     private final EventRepository eventRepository;
     private Partitioner partitioner;
     private final AtomicBoolean published = new AtomicBoolean(false);
+    private final Set<String> publishedTopics = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final AtomicBoolean flushPublishBufferThreadSet = new AtomicBoolean(false);
     private volatile Thread flushPublishBufferThread;
     private final int flushPublishBufferSize;
@@ -67,6 +71,8 @@ public class DefaultEventSQLPublisher implements EventSQLPublisher {
         eventRepository.createAll(toCreateEvents);
 
         published.set(true);
+        publishedTopics.add(topicName);
+
         var shouldSetFlushPublishBufferThread = !flushPublishBufferThreadSet.compareAndExchange(false, true);
         if (shouldSetFlushPublishBufferThread) {
             startFlushPublishBufferThread();
@@ -82,7 +88,7 @@ public class DefaultEventSQLPublisher implements EventSQLPublisher {
                         Thread.sleep(flushPublishBufferDelay);
                     }
                     if (moreToFlush || published.getAndSet(false)) {
-                        var flushed = eventRepository.flushBuffer(flushPublishBufferSize);
+                        var flushed = eventRepository.flushBuffer(publishedTopics, flushPublishBufferSize);
                         moreToFlush = flushed > flushPublishBufferSize;
                     }
                 } catch (Exception e) {

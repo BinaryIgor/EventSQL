@@ -16,12 +16,12 @@ public interface EventSQLRegistry {
 
     List<ConsumerDefinition> listConsumers();
     
-    void configureTableManager(TableManager tableManager);
+    void configureTablesManager(TablesManager tablesManager);
     
-    TableManager tableManager();
+    TablesManager tablesManager();
 
     // all methods must be idempotent
-    interface TableManager {
+    interface TablesManager {
         
         void prepareTopicTable();
         

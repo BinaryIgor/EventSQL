@@ -49,12 +49,12 @@ public class ShardedEventSQLRegistry implements EventSQLRegistry {
     }
 
     @Override
-    public void configureTableManager(TableManager tableManager) {
-        registries.forEach(r -> r.configureTableManager(tableManager));
+    public void configureTablesManager(TablesManager tablesManager) {
+        registries.forEach(r -> r.configureTablesManager(tablesManager));
     }
 
     @Override
-    public TableManager tableManager() {
-        return registries.getFirst().tableManager();
+    public TablesManager tablesManager() {
+        return registries.getFirst().tablesManager();
     }
 }

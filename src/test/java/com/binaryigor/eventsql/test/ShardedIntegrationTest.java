@@ -77,9 +77,9 @@ public abstract class ShardedIntegrationTest {
         }
     }
 
-    protected void flushPublishBuffers() {
+    protected void flushPublishBuffers(String topic) {
         eventRepositories.forEach(er -> {
-            var flushed = er.flushBuffer(Short.MAX_VALUE);
+            var flushed = er.flushBuffer(List.of(topic), Short.MAX_VALUE);
             if (flushed == 0) {
                 // if flush was in progress, wait arbitrary amount of time for it to finish
                 delay(100);

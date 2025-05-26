@@ -2,13 +2,13 @@ package com.binaryigor.eventsql.internal;
 
 import com.binaryigor.eventsql.EventSQLRegistry;
 
-public class DefaultTableManager implements EventSQLRegistry.TableManager {
+public class DefaultTablesManager implements EventSQLRegistry.TablesManager {
 
     private final TopicRepository topicRepository;
     private final ConsumerRepository consumerRepository;
     private final EventRepository eventRepository;
 
-    public DefaultTableManager(TopicRepository topicRepository, ConsumerRepository consumerRepository, EventRepository eventRepository) {
+    public DefaultTablesManager(TopicRepository topicRepository, ConsumerRepository consumerRepository, EventRepository eventRepository) {
         this.topicRepository = topicRepository;
         this.consumerRepository = consumerRepository;
         this.eventRepository = eventRepository;
@@ -26,7 +26,6 @@ public class DefaultTableManager implements EventSQLRegistry.TableManager {
 
     @Override
     public void prepareEventTable(String topic) {
-        eventRepository.prepareBufferLock();
         eventRepository.createBuffer();
         eventRepository.createPartition(topic);
     }

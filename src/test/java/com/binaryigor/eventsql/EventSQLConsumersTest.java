@@ -197,7 +197,7 @@ public class EventSQLConsumersTest extends IntegrationTest {
         publisher.publish(event1);
         publisher.publish(event2);
         publisher.publish(event3);
-        flushPublishBuffer();
+        flushPublishBuffer(TOPIC);
 
         // then
         delay(100);

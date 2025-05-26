@@ -6,8 +6,6 @@ import com.binaryigor.eventsql.internal.EventRepository;
 import com.binaryigor.eventsql.internal.Transactions;
 import org.jooq.*;
 import org.jooq.impl.DSL;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -17,12 +15,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class SQLEventRepository implements EventRepository {
 
-    private static final Logger logger = LoggerFactory.getLogger(SQLEventRepository.class);
     private static final Table<?> EVENT_BUFFER = DSL.table("event_buffer");
     private static final Table<?> EVENT_BUFFER_LOCK = DSL.table("event_buffer_lock");
     private static final Field<String> TOPIC = DSL.field("topic", String.class);
     private static final Field<Long> ID = DSL.field("id", Long.class);
-    private static final Field<String> EVENT_BUFFER_LOCK_ID = DSL.field("id", String.class);
     private static final Field<Short> PARTITION = DSL.field("partition", Short.class);
     private static final Field<String> KEY = DSL.field("key", String.class);
     private static final Field<byte[]> VALUE = DSL.field("value", byte[].class);
@@ -39,71 +35,75 @@ public class SQLEventRepository implements EventRepository {
 
     @Override
     public void createBuffer() {
-        contextProvider.get()
-                .createTableIfNotExists(EVENT_BUFFER)
-                .column(ID, ID.getDataType().identity(true))
-                .column(TOPIC, TOPIC.getDataType().notNull())
-                .column(PARTITION, PARTITION.getDataType().notNull())
-                .column(KEY)
-                .column(VALUE, VALUE.getDataType().notNull())
-                .column(CREATED_AT, CREATED_AT.getDataType().notNull().defaultValue(DSL.now()))
-                .column(METADATA, METADATA.getDataType().notNull())
-                .constraint(DSL.constraint().primaryKey(ID))
-                .execute();
-    }
-
-    @Override
-    public void prepareBufferLock() {
         transactions.execute(() -> {
-            var tContext = contextProvider.get();
-
-            tContext.createTableIfNotExists(EVENT_BUFFER_LOCK)
-                    .column(EVENT_BUFFER_LOCK_ID)
-                    .constraint(DSL.primaryKey(EVENT_BUFFER_LOCK_ID))
+            contextProvider.get()
+                    .createTableIfNotExists(EVENT_BUFFER)
+                    .column(ID, ID.getDataType().identity(true))
+                    .column(TOPIC, TOPIC.getDataType().notNull())
+                    .column(PARTITION, PARTITION.getDataType().notNull())
+                    .column(KEY)
+                    .column(VALUE, VALUE.getDataType().notNull())
+                    .column(CREATED_AT, CREATED_AT.getDataType().notNull().defaultValue(DSL.now()))
+                    .column(METADATA, METADATA.getDataType().notNull())
+                    .constraint(DSL.primaryKey(ID))
                     .execute();
 
-            var locksCount = tContext.fetchCount(EVENT_BUFFER_LOCK);
-            if (locksCount == 1) {
-                logger.info("There is exactly one {} record, not need to create it", EVENT_BUFFER_LOCK);
-                return;
-            }
-            if (locksCount > 1) {
-                logger.warn("For some reason, there is more than on {} record, removing them", EVENT_BUFFER_LOCK);
-                tContext.deleteFrom(EVENT_BUFFER_LOCK).execute();
-            }
-
-            logger.info("Creating singleton {} record", EVENT_BUFFER_LOCK);
-            tContext.insertInto(EVENT_BUFFER_LOCK)
-                    .columns(EVENT_BUFFER_LOCK_ID)
-                    .values("singleton-lock")
+            contextProvider.get()
+                    .createIndexIfNotExists("event_buffer_topic_id")
+                    .on(EVENT_BUFFER, TOPIC, ID)
                     .execute();
         });
     }
 
     @Override
     public void createPartition(String topic) {
-        contextProvider.get()
-                .createTableIfNotExists(eventTable(topic))
-                .column(ID, ID.getDataType().identity(true))
-                .column(PARTITION, PARTITION.getDataType().notNull())
-                .column(KEY)
-                .column(VALUE, VALUE.getDataType().notNull())
-                .column(BUFFERED_AT, BUFFERED_AT.getDataType().notNull())
-                .column(CREATED_AT, CREATED_AT.getDataType().notNull().defaultValue(DSL.now()))
-                .column(METADATA, METADATA.getDataType().notNull())
-                .constraint(DSL.constraint().primaryKey(ID))
-                .execute();
+        transactions.execute(() -> {
+            var tContext = contextProvider.get();
+
+            tContext.createTableIfNotExists(eventTable(topic))
+                    .column(ID, ID.getDataType().identity(true))
+                    .column(PARTITION, PARTITION.getDataType().notNull())
+                    .column(KEY)
+                    .column(VALUE, VALUE.getDataType().notNull())
+                    .column(BUFFERED_AT, BUFFERED_AT.getDataType().notNull())
+                    .column(CREATED_AT, CREATED_AT.getDataType().notNull().defaultValue(DSL.now()))
+                    .column(METADATA, METADATA.getDataType().notNull())
+                    .constraint(DSL.constraint().primaryKey(ID))
+                    .execute();
+
+            tContext.createTableIfNotExists(EVENT_BUFFER_LOCK)
+                    .column(TOPIC)
+                    .constraint(DSL.primaryKey(TOPIC))
+                    .execute();
+
+            tContext.insertInto(EVENT_BUFFER_LOCK)
+                    .columns(TOPIC)
+                    .values(topic)
+                    .onConflictDoNothing()
+                    .execute();
+        });
     }
 
     private Table<?> eventTable(String topic) {
         return DSL.table(topic + "_event");
     }
 
+    // TODO: lacking test cases
     @Override
     public void dropPartition(String topic) {
-        contextProvider.get()
-                .dropTableIfExists(eventTable(topic))
-                .execute();
+        transactions.execute(() -> {
+            var tContext = contextProvider.get();
+
+            tContext.dropTableIfExists(eventTable(topic))
+                    .execute();
+
+            tContext.deleteFrom(EVENT_BUFFER)
+                    .where(TOPIC.eq(topic))
+                    .execute();
+            tContext.deleteFrom(EVENT_BUFFER_LOCK)
+                    .where(TOPIC.eq(topic))
+                    .execute();
+        });
     }
 
     @Override
@@ -130,30 +130,32 @@ public class SQLEventRepository implements EventRepository {
         insert.execute();
     }
 
-    // TODO: maybe per topic?
+    // TODO: lacking test cases
     @Override
-    public int flushBuffer(int toFlush) {
+    public int flushBuffer(Collection<String> topics, int toFlush) {
+        if (topics.isEmpty()) {
+            return 0;
+        }
+
         var toFlushOverLimit = toFlush + 1;
         var flushed = new AtomicInteger(0);
 
         transactions.execute(() -> {
             var tContext = contextProvider.get();
-            var lock = tContext.select(EVENT_BUFFER_LOCK_ID)
+            var lockedTopics = tContext.select(TOPIC)
                     .from(EVENT_BUFFER_LOCK)
+                    .where(TOPIC.in(topics))
                     .forUpdate()
                     .skipLocked()
-                    .fetch();
-            if (lock.isEmpty()) {
+                    .fetch(TOPIC);
+            if (lockedTopics.isEmpty()) {
                 return;
-            }
-            if (lock.size() > 1) {
-                throw new IllegalArgumentException("%s table has %d non-locked records but should have just one; fix your db state!"
-                        .formatted(EVENT_BUFFER_LOCK, lock.size()));
             }
 
             var eventBufferIdsByTopic = tContext.select(TOPIC, ID)
                     .from(EVENT_BUFFER)
-                    .orderBy(ID)
+                    .where(TOPIC.in(lockedTopics))
+                    .orderBy(TOPIC, ID)
                     .limit(toFlushOverLimit)
                     .fetchGroups(TOPIC, ID);
             if (eventBufferIdsByTopic.isEmpty()) {
