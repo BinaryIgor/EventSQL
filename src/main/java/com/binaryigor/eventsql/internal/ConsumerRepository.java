@@ -6,6 +6,8 @@ import java.util.Optional;
 
 public interface ConsumerRepository {
 
+    void createTable();
+
     void save(Consumer consumer);
 
     void saveAll(Collection<Consumer> consumers);

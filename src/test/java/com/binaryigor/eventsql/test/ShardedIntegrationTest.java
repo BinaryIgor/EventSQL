@@ -34,8 +34,6 @@ public abstract class ShardedIntegrationTest {
 
         dataSources = List.of(dataSource(POSTGRES1), dataSource(POSTGRES2));
         dslContexts = dataSources.stream().map(IntegrationTest::dslContext).toList();
-
-        dslContexts.forEach(IntegrationTest::initDbSchema);
     }
 
     protected EventSQL eventSQL;
@@ -56,7 +54,7 @@ public abstract class ShardedIntegrationTest {
         dltEventFactory = eventSQL.consumers().dltEventFactory();
 
         var transactions = dslContexts.stream().map(SQLTransactions::new).toList();
-        eventRepositories = transactions.stream().map(t -> new SQLEventRepository(t, t, EventSQLDialect.POSTGRES)).toList();
+        eventRepositories = transactions.stream().map(t -> new SQLEventRepository(t, t)).toList();
 
         dslContexts.forEach(ctx -> cleanDb(ctx, registry));
     }
@@ -79,9 +77,9 @@ public abstract class ShardedIntegrationTest {
         }
     }
 
-    protected void flushPublishBuffers() {
+    protected void flushPublishBuffers(String topic) {
         eventRepositories.forEach(er -> {
-            var flushed = er.flushBuffer(Short.MAX_VALUE);
+            var flushed = er.flushBuffer(List.of(topic), Short.MAX_VALUE);
             if (flushed == 0) {
                 // if flush was in progress, wait arbitrary amount of time for it to finish
                 delay(100);

@@ -67,7 +67,7 @@ public class EventSQLRegistryTest extends IntegrationTest {
         var topic = new TopicDefinition(TOPIC, -1);
         registry.registerTopic(topic);
         publisher.publish(TestObjects.randomEventPublication(TOPIC));
-        flushPublishBuffer();
+        flushPublishBuffer(TOPIC);
 
         // expect
         assertRegisterThrowsHasEventsOrConsumersException(new TopicDefinition(topic.name(), 2));
@@ -98,7 +98,9 @@ public class EventSQLRegistryTest extends IntegrationTest {
         // and events
         publisher.publish(TestObjects.randomEventPublication(topic.name()));
         publisher.publish(TestObjects.randomEventPublication(topic.name()));
-        flushPublishBuffer();
+        flushPublishBuffer(TOPIC);
+        assertThat(eventTableExists(topic.name()))
+                .isTrue();
         assertThat(topicEventsCount(topic.name()))
                 .isEqualTo(2);
 
@@ -108,8 +110,7 @@ public class EventSQLRegistryTest extends IntegrationTest {
         // then
         assertThat(registry.listTopics())
                 .doesNotContain(topic);
-        assertThat(topicEventsCount(topic.name()))
-                .isZero();
+        assertThat(eventTableExists(topic.name())).isFalse();
     }
 
     @Test

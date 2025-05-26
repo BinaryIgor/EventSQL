@@ -1,26 +1,20 @@
 package com.binaryigor.eventsql.internal.sql;
 
 import com.binaryigor.eventsql.Event;
-import com.binaryigor.eventsql.EventSQLDialect;
 import com.binaryigor.eventsql.internal.EventInput;
 import com.binaryigor.eventsql.internal.EventRepository;
 import com.binaryigor.eventsql.internal.Transactions;
-import org.jooq.Field;
-import org.jooq.JSON;
-import org.jooq.Table;
+import org.jooq.*;
 import org.jooq.impl.DSL;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class SQLEventRepository implements EventRepository {
 
-    private static final Logger logger = LoggerFactory.getLogger(SQLEventRepository.class);
-    private static final Table<?> EVENT = DSL.table("event");
     private static final Table<?> EVENT_BUFFER = DSL.table("event_buffer");
     private static final Table<?> EVENT_BUFFER_LOCK = DSL.table("event_buffer_lock");
     private static final Field<String> TOPIC = DSL.field("topic", String.class);
@@ -33,43 +27,83 @@ public class SQLEventRepository implements EventRepository {
     private static final Field<Timestamp> CREATED_AT = DSL.field("created_at", Timestamp.class);
     private final Transactions transactions;
     private final DSLContextProvider contextProvider;
-    private final EventSQLDialect dialect;
 
-    public SQLEventRepository(Transactions transactions, DSLContextProvider contextProvider, EventSQLDialect dialect) {
+    public SQLEventRepository(Transactions transactions, DSLContextProvider contextProvider) {
         this.transactions = transactions;
         this.contextProvider = contextProvider;
-        this.dialect = dialect;
+    }
+
+    @Override
+    public void createBuffer() {
+        transactions.execute(() -> {
+            contextProvider.get()
+                    .createTableIfNotExists(EVENT_BUFFER)
+                    .column(ID, ID.getDataType().identity(true))
+                    .column(TOPIC, TOPIC.getDataType().notNull())
+                    .column(PARTITION, PARTITION.getDataType().notNull())
+                    .column(KEY)
+                    .column(VALUE, VALUE.getDataType().notNull())
+                    .column(CREATED_AT, CREATED_AT.getDataType().notNull().defaultValue(DSL.now()))
+                    .column(METADATA, METADATA.getDataType().notNull())
+                    .constraint(DSL.primaryKey(ID))
+                    .execute();
+
+            contextProvider.get()
+                    .createIndexIfNotExists("event_buffer_topic_id")
+                    .on(EVENT_BUFFER, TOPIC, ID)
+                    .execute();
+        });
     }
 
     @Override
     public void createPartition(String topic) {
-        if (dialect == EventSQLDialect.POSTGRES) {
-            contextProvider.get()
-                    .execute("CREATE TABLE %s PARTITION OF %s FOR VALUES IN ('%s')"
-                            .formatted(topicTablePartitionName(topic), EVENT.getName(), topic));
-        } else {
-            warnPartitionManagementNotSupportedForDialect();
-        }
-    }
+        transactions.execute(() -> {
+            var tContext = contextProvider.get();
 
-    private void warnPartitionManagementNotSupportedForDialect() {
-        logger.warn("Partition management is not supported for {} SQL dialect. Manage it manually or consider opening a Pull Request :)", dialect);
-    }
-
-    private String topicTablePartitionName(String topic) {
-        return "%s_%s".formatted(topic, EVENT.getName());
-    }
-
-    @Override
-    public void deletePartition(String topic) {
-        if (dialect == EventSQLDialect.POSTGRES) {
-            contextProvider.get()
-                    .dropTableIfExists(topicTablePartitionName(topic))
-                    .cascade()
+            tContext.createTableIfNotExists(eventTable(topic))
+                    .column(ID, ID.getDataType().identity(true))
+                    .column(PARTITION, PARTITION.getDataType().notNull())
+                    .column(KEY)
+                    .column(VALUE, VALUE.getDataType().notNull())
+                    .column(BUFFERED_AT, BUFFERED_AT.getDataType().notNull())
+                    .column(CREATED_AT, CREATED_AT.getDataType().notNull().defaultValue(DSL.now()))
+                    .column(METADATA, METADATA.getDataType().notNull())
+                    .constraint(DSL.constraint().primaryKey(ID))
                     .execute();
-        } else {
-            warnPartitionManagementNotSupportedForDialect();
-        }
+
+            tContext.createTableIfNotExists(EVENT_BUFFER_LOCK)
+                    .column(TOPIC)
+                    .constraint(DSL.primaryKey(TOPIC))
+                    .execute();
+
+            tContext.insertInto(EVENT_BUFFER_LOCK)
+                    .columns(TOPIC)
+                    .values(topic)
+                    .onConflictDoNothing()
+                    .execute();
+        });
+    }
+
+    private Table<?> eventTable(String topic) {
+        return DSL.table(topic + "_event");
+    }
+
+    // TODO: lacking test cases
+    @Override
+    public void dropPartition(String topic) {
+        transactions.execute(() -> {
+            var tContext = contextProvider.get();
+
+            tContext.dropTableIfExists(eventTable(topic))
+                    .execute();
+
+            tContext.deleteFrom(EVENT_BUFFER)
+                    .where(TOPIC.eq(topic))
+                    .execute();
+            tContext.deleteFrom(EVENT_BUFFER_LOCK)
+                    .where(TOPIC.eq(topic))
+                    .execute();
+        });
     }
 
     @Override
@@ -96,47 +130,55 @@ public class SQLEventRepository implements EventRepository {
         insert.execute();
     }
 
+    // TODO: lacking test cases
     @Override
-    public int flushBuffer(int toFlush) {
+    public int flushBuffer(Collection<String> topics, int toFlush) {
+        if (topics.isEmpty()) {
+            return 0;
+        }
+
         var toFlushOverLimit = toFlush + 1;
         var flushed = new AtomicInteger(0);
 
         transactions.execute(() -> {
             var tContext = contextProvider.get();
-            var lock = tContext.select(CREATED_AT)
+            var lockedTopics = tContext.select(TOPIC)
                     .from(EVENT_BUFFER_LOCK)
+                    .where(TOPIC.in(topics))
                     .forUpdate()
                     .skipLocked()
-                    .fetch();
-            if (lock.isEmpty()) {
+                    .fetch(TOPIC);
+            if (lockedTopics.isEmpty()) {
                 return;
             }
-            if (lock.size() > 1) {
-                throw new IllegalArgumentException("%s table has %d non-locked records but should have just one; fix your db state!"
-                        .formatted(EVENT_BUFFER_LOCK, lock.size()));
-            }
 
-            var eventBufferIds = tContext.select(ID)
+            var eventBufferIdsByTopic = tContext.select(TOPIC, ID)
                     .from(EVENT_BUFFER)
-                    .orderBy(ID)
+                    .where(TOPIC.in(lockedTopics))
+                    .orderBy(TOPIC, ID)
                     .limit(toFlushOverLimit)
-                    .fetch(ID);
-            if (eventBufferIds.isEmpty()) {
+                    .fetchGroups(TOPIC, ID);
+            if (eventBufferIdsByTopic.isEmpty()) {
                 return;
             }
 
-            tContext.insertInto(EVENT)
-                    .columns(TOPIC, PARTITION, KEY, VALUE, METADATA, BUFFERED_AT)
-                    .select(tContext.select(TOPIC, PARTITION, KEY, VALUE, METADATA, CREATED_AT.as(BUFFERED_AT))
-                            .from(EVENT_BUFFER)
-                            .where(ID.in(eventBufferIds)))
-                    .execute();
+            var queriesToBatch = new ArrayList<Query>();
 
-            tContext.deleteFrom(EVENT_BUFFER)
-                    .where(ID.in(eventBufferIds))
-                    .execute();
+            eventBufferIdsByTopic.forEach((topic, ids) -> {
+                queriesToBatch.add(tContext.insertInto(eventTable(topic))
+                        .columns(PARTITION, KEY, VALUE, METADATA, BUFFERED_AT)
+                        .select(tContext.select(PARTITION, KEY, VALUE, METADATA, CREATED_AT.as(BUFFERED_AT))
+                                .from(EVENT_BUFFER)
+                                .where(ID.in(ids))));
 
-            flushed.set(toFlushOverLimit);
+                flushed.addAndGet(ids.size());
+            });
+
+            var insertedIds = eventBufferIdsByTopic.values().stream().flatMap(List::stream).toList();
+            queriesToBatch.add(tContext.deleteFrom(EVENT_BUFFER)
+                    .where(ID.in(insertedIds)));
+
+            tContext.batch(queriesToBatch).execute();
         });
 
         return flushed.get();
@@ -148,7 +190,7 @@ public class SQLEventRepository implements EventRepository {
     }
 
     public List<Event> nextEvents(String topic, Short partition, Long lastId, int limit) {
-        var condition = TOPIC.eq(topic);
+        Condition condition = DSL.trueCondition();
         if (lastId != null) {
             condition = condition.and(ID.greaterThan(lastId));
         }
@@ -156,8 +198,8 @@ public class SQLEventRepository implements EventRepository {
             condition = condition.and(PARTITION.eq(partition));
         }
         return contextProvider.get()
-                .select(TOPIC, ID, PARTITION, KEY, VALUE, METADATA)
-                .from(EVENT)
+                .select(DSL.val(topic).as(TOPIC), ID, PARTITION, KEY, VALUE, METADATA)
+                .from(eventTable(topic))
                 .where(condition)
                 .orderBy(ID)
                 .limit(limit)

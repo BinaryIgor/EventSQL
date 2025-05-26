@@ -12,7 +12,7 @@ For scalability details, see [benchmarks](/benchmarks/README.md).
 
 ## How it works
 
-We just need to have a few tables (postgres syntax):
+We just need to have a few tables (postgres syntax, schema managed fully by EventSQL):
 
 ```sql
 CREATE TABLE topic (
@@ -33,42 +33,39 @@ CREATE TABLE consumer (
   PRIMARY KEY (topic, name, partition)
 );
 
-CREATE TABLE event (
-  topic TEXT NOT NULL,
-  id BIGSERIAL NOT NULL,
+CREATE TABLE {topic}_event (
+  id BIGSERIAL PRIMARY KEY,
   partition SMALLINT NOT NULL,
   key TEXT,
   value BYTEA NOT NULL,
   buffered_at TIMESTAMP NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  metadata JSON NOT NULL,
-  PRIMARY KEY (topic, id)
-) PARTITION BY LIST (topic);
+  metadata JSON NOT NULL
+);
 
--- Same schema as event, just not partitioned. --
+-- Same schema as event, just not partitioned (by topic). --
 -- It is used to handle eventual consistency of auto increment; --
 -- there is no guarantee that record of id 2 is visible after id 1 record. --
 -- Events are first inserted to the event_buffer; --
--- they are then moved to event table in bulk, by a single, serialized writer; --
+-- they are then moved to the {topic}_event table in bulk, by a single, serialized writer (per topic); --
 -- because there is only one writer, it fixes eventual consistency issue --
 CREATE TABLE event_buffer (
-  topic TEXT NOT NULL,
   id BIGSERIAL PRIMARY KEY,
+  topic TEXT NOT NULL,
   partition SMALLINT NOT NULL,
   key TEXT,
   value BYTEA NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   metadata JSON NOT NULL
 );
--- Used to lock single event_buffer to event writer; --
--- there cannot be more than one record of this table! --
+CREATE INDEX event_buffer_topic_id ON event_buffer (topic, id);
+-- Used to lock single (per topic) event_buffer to {topic}_event writer --
 CREATE TABLE event_buffer_lock (
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  topic TEXT PRIMARY KEY
 );
-INSERT INTO event_buffer_lock VALUES (DEFAULT);
 ```
 
-To consume messages, we just need to periodically (every one to a few seconds) do:
+To consume events, we just need to periodically (every one to a few seconds) do:
 
 ```sql
 BEGIN;
@@ -77,8 +74,8 @@ SELECT * FROM consumer
 WHERE topic = :topic AND name = :c_name 
 FOR UPDATE SKIP LOCKED;
 
-SELECT * FROM event
-WHERE topic = :topic AND (:last_event_id IS NULL OR id > :last_event_id)
+SELECT * FROM {topic}_event
+WHERE (:last_event_id IS NULL OR id > :last_event_id)
 ORDER BY id LIMIT :limit;
 
 (process events)
@@ -105,8 +102,8 @@ SELECT * FROM consumer
 WHERE topic = :topic AND name = :c_name AND partition = 0 
 FOR UPDATE SKIP LOCKED;
 
-SELECT * FROM event
-WHERE topic = :topic AND partition = 0 AND (:last_event_id IS NULL OR id > :last_event_id)
+SELECT * FROM {topic}_event
+WHERE partition = 0 AND (:last_event_id IS NULL OR id > :last_event_id)
 ORDER BY id LIMIT :limit;
 
 (process events)
@@ -130,9 +127,8 @@ them:
 ```java
 
 import com.binaryigor.eventsql.EventSQL;
-// dialect of your events backend - POSTGRES, MYSQL, MARIADB and so on;
-// as of now, only POSTGRES has fully tested support;
-// should also work with others but some things - event table partition management for example - works only with Postgres, for others it must be managed manually
+// dialect of your events backend - POSTGRES, MYSQL, MARIADB;
+// as of now, only POSTGRES has fully tested support, but should work on others as well
 import com.binaryigor.eventsql.EventSQLDialect;
 import javax.sql.DataSource;
 
@@ -141,6 +137,9 @@ ver shardedEventSQL = new EventSQL(dataSources, EventSQLDialect.POSTGRES);
 ```
 
 Sharded version works in the same vain - it just assumes that topics and consumers are hosted on multiple dbs.
+
+Required tables are managed automatically by the library, but if you want to customize their schema a bit, you can provide your own `EventSQLRegistry.TablesManager` implementation.
+See `EventSQLRegistry` for details.
 
 ### Topics and Consumers
 
@@ -248,7 +247,7 @@ var consumers = eventSQL.consumers();
 consumers.startConsumer("txt_topic", "single-consumer", event -> {
   // handle single event
 });
-// with more frequent polling - by default it is 0.5 second
+// with more frequent polling - by default it is 1 second
 consumers.startConsumer("txt_topic", "single-consumer-customized", event -> {
   // handle single event
 }, Duration.ofMillis(100));

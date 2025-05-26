@@ -47,4 +47,14 @@ public class ShardedEventSQLRegistry implements EventSQLRegistry {
     public List<ConsumerDefinition> listConsumers() {
         return registries.getFirst().listConsumers();
     }
+
+    @Override
+    public void configureTablesManager(TablesManager tablesManager) {
+        registries.forEach(r -> r.configureTablesManager(tablesManager));
+    }
+
+    @Override
+    public TablesManager tablesManager() {
+        return registries.getFirst().tablesManager();
+    }
 }

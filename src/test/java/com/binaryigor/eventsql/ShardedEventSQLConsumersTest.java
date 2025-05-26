@@ -46,7 +46,7 @@ public class ShardedEventSQLConsumersTest extends ShardedIntegrationTest {
         // when
         consumers.startConsumer(consumer.topic(), consumer.name(), capturedEvents::add, CONSUMER_POLLING_DELAY);
         events.forEach(publisher::publish);
-        flushPublishBuffers();
+        flushPublishBuffers(TOPIC);
 
         // then
         awaitAssertion(() -> assertExpectedEvents(capturedEvents, events));
@@ -81,7 +81,7 @@ public class ShardedEventSQLConsumersTest extends ShardedIntegrationTest {
             }
         }, CONSUMER_POLLING_DELAY);
         events.forEach(publisher::publish);
-        flushPublishBuffers();
+        flushPublishBuffers(PARTITIONED_TOPIC);
 
         // then
         awaitAssertion(() -> {

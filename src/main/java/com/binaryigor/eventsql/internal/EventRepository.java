@@ -7,15 +7,17 @@ import java.util.List;
 
 public interface EventRepository {
 
+    void createBuffer();
+
     void createPartition(String topic);
 
-    void deletePartition(String topic);
+    void dropPartition(String topic);
 
     void create(EventInput event);
 
     void createAll(Collection<EventInput> events);
 
-    int flushBuffer(int toFlush);
+    int flushBuffer(Collection<String> topics, int toFlush);
 
     List<Event> nextEvents(String topic, Long lastId, int limit);
 

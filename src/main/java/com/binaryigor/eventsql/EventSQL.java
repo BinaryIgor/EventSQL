@@ -69,7 +69,7 @@ public class EventSQL {
 
             var topicRepository = new SQLTopicRepository(transactions);
             var consumerRepository = new SQLConsumerRepository(transactions);
-            var eventRepository = new SQLEventRepository(transactions, transactions, sqlDialect);
+            var eventRepository = new SQLEventRepository(transactions, transactions);
 
             var registry = new DefaultEventSQLRegistry(topicRepository, eventRepository, consumerRepository, transactions);
 
