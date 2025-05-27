@@ -127,8 +127,7 @@ them:
 ```java
 
 import com.binaryigor.eventsql.EventSQL;
-// dialect of your events backend - POSTGRES, MYSQL, MARIADB;
-// as of now, only POSTGRES has fully tested support, but should work on others as well
+// dialect of your events backend - POSTGRES, MYSQL and MARIADB are supported, as of now
 import com.binaryigor.eventsql.EventSQLDialect;
 import javax.sql.DataSource;
 

@@ -7,10 +7,8 @@ import org.jooq.Condition;
 import org.jooq.Field;
 import org.jooq.Table;
 import org.jooq.impl.DSL;
-import org.jooq.impl.SQLDataType;
 
 import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -18,14 +16,14 @@ import java.util.Optional;
 public class SQLConsumerRepository implements ConsumerRepository {
 
     private static final Table<?> CONSUMER = DSL.table("consumer");
-    private static final Field<String> TOPIC = DSL.field("topic", String.class);
-    private static final Field<String> NAME = DSL.field("name", String.class);
-    private static final Field<Short> PARTITION = DSL.field("partition", Short.class);
-    private static final Field<Long> FIRST_EVENT_ID = DSL.field("first_event_id", Long.class);
-    private static final Field<Long> LAST_EVENT_ID = DSL.field("last_event_id", Long.class);
-    private static final Field<Instant> LAST_CONSUMPTION_AT = DSL.field("last_consumption_at", Instant.class);
-    private static final Field<Long> CONSUMED_EVENTS = DSL.field("consumed_events", Long.class);
-    private static final Field<Timestamp> CREATED_AT = DSL.field("created_at", Timestamp.class);
+    private static final Field<String> TOPIC = DSL.field("eql_topic", String.class);
+    private static final Field<String> NAME = DSL.field("eql_name", String.class);
+    private static final Field<Short> PARTITION = DSL.field("eql_partition", Short.class);
+    private static final Field<Long> FIRST_EVENT_ID = DSL.field("eql_first_event_id", Long.class);
+    private static final Field<Long> LAST_EVENT_ID = DSL.field("eql_last_event_id", Long.class);
+    private static final Field<Timestamp> LAST_CONSUMPTION_AT = DSL.field("eql_last_consumption_at", Timestamp.class);
+    private static final Field<Long> CONSUMED_EVENTS = DSL.field("eql_consumed_events", Long.class);
+    private static final Field<Timestamp> CREATED_AT = DSL.field("eql_created_at", Timestamp.class);
     private final DSLContextProvider contextProvider;
 
     public SQLConsumerRepository(DSLContextProvider contextProvider) {
@@ -36,12 +34,13 @@ public class SQLConsumerRepository implements ConsumerRepository {
     public void createTable() {
         contextProvider.get()
                 .createTableIfNotExists(CONSUMER)
-                .column(TOPIC, TOPIC.getDataType().notNull())
-                .column(NAME, NAME.getDataType().notNull())
+                // MYSQL requires to limit text length for every indexed column
+                .column(TOPIC, TOPIC.getDataType().notNull().length(255))
+                .column(NAME, NAME.getDataType().notNull().length(255))
                 .column(PARTITION, PARTITION.getDataType().notNull())
                 .column(FIRST_EVENT_ID)
                 .column(LAST_EVENT_ID)
-                .column(LAST_CONSUMPTION_AT, SQLDataType.TIMESTAMP)
+                .column(LAST_CONSUMPTION_AT)
                 .column(CONSUMED_EVENTS, CONSUMED_EVENTS.getDataType().notNull())
                 .column(CREATED_AT, CREATED_AT.getDataType().notNull().defaultValue(DSL.now()))
                 .constraint(DSL.constraint().primaryKey(TOPIC, NAME, PARTITION))
@@ -63,7 +62,9 @@ public class SQLConsumerRepository implements ConsumerRepository {
                 .columns(TOPIC, NAME, PARTITION, FIRST_EVENT_ID, LAST_EVENT_ID, LAST_CONSUMPTION_AT, CONSUMED_EVENTS);
 
         consumers.forEach(c -> insert.values(c.topic(), c.name(), (short) c.partition(),
-                c.firstEventId(), c.lastEventId(), c.lastConsumptionAt(), c.consumedEvents()));
+                c.firstEventId(), c.lastEventId(),
+                c.lastConsumptionAt() == null ? null : Timestamp.from(c.lastConsumptionAt()),
+                c.consumedEvents()));
 
         insert.onConflict(TOPIC, NAME, PARTITION)
                 .doUpdate()
@@ -116,7 +117,7 @@ public class SQLConsumerRepository implements ConsumerRepository {
                 .update(CONSUMER)
                 .set(FIRST_EVENT_ID, consumer.firstEventId())
                 .set(LAST_EVENT_ID, consumer.lastEventId())
-                .set(LAST_CONSUMPTION_AT, consumer.lastConsumptionAt())
+                .set(LAST_CONSUMPTION_AT, Timestamp.from(consumer.lastConsumptionAt()))
                 .set(CONSUMED_EVENTS, consumer.consumedEvents())
                 .where(TOPIC.eq(consumer.topic())
                         .and(NAME.eq(consumer.name()))

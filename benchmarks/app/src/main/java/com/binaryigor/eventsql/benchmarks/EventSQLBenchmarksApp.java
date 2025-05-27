@@ -1,7 +1,6 @@
 package com.binaryigor.eventsql.benchmarks;
 
 import com.binaryigor.eventsql.EventSQL;
-import com.binaryigor.eventsql.EventSQLDialect;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.SpringApplication;
@@ -25,7 +24,7 @@ public class EventSQLBenchmarksApp {
                 .filter(EventsProperties.DataSourceProperties::enabled)
                 .map(this::dataSource)
                 .toList();
-        return new EventSQL(dataSources, EventSQLDialect.POSTGRES);
+        return new EventSQL(dataSources, eventsProperties.sqlDialect());
     }
 
     private DataSource dataSource(EventsProperties.DataSourceProperties properties) {

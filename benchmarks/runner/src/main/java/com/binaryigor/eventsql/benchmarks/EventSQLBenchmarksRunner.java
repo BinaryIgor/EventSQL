@@ -23,7 +23,7 @@ public class EventSQLBenchmarksRunner {
     static final String DB_USERNAME = envValueOrDefault("DB_URL", "events");
     static final String DB_PASSWORD = envValueOrDefault("DB_PASSWORD", "events");
     static final int DATA_SOURCE_POOL_SIZE = envIntValueOrDefault("DATA_SOURCE_POOL_SIZE", 50);
-    static final EventSQLDialect SQL_DIALECT = EventSQLDialect.valueOf(envValueOrDefault("SQL_DIALECT", "POSTGRES"));
+    static final EventSQLDialect SQL_DIALECT;
     static final int RUNNER_INSTANCES = envIntValueOrDefault("RUNNER_INSTANCES", 1);
     static final int EVENTS_TO_PUBLISH = envIntValueOrDefault("EVENTS_TO_PUBLISH", 60_000);
     static final int EVENTS_RATE = envIntValueOrDefault("EVENTS_RATE", 1_000);
@@ -32,6 +32,18 @@ public class EventSQLBenchmarksRunner {
 
     static {
         System.setProperty("org.slf4j.simpleLogger.logFile", "System.out");
+        var sqlDialect = envValueOrDefault("SQL_DIALECT", null);
+        if (sqlDialect == null) {
+            if (DB_URL.contains("postgres")) {
+                SQL_DIALECT = EventSQLDialect.POSTGRES;
+            } else if (DB_URL.contains("mysql")) {
+                SQL_DIALECT = EventSQLDialect.MYSQL;
+            } else {
+                SQL_DIALECT = EventSQLDialect.MARIADB;
+            }
+        } else {
+            SQL_DIALECT = EventSQLDialect.valueOf(sqlDialect);
+        }
     }
 
     public static void main(String[] args) throws Exception {
@@ -128,7 +140,7 @@ public class EventSQLBenchmarksRunner {
     }
 
     static EventTableStats eventTableStats(DataSource source) {
-        return executeQuery(source, "SELECT partition, MAX(id) FROM %s_event GROUP BY partition"
+        return executeQuery(source, "SELECT eql_partition, MAX(eql_id) FROM %s_event GROUP BY eql_partition"
                 .formatted(TEST_TOPIC), r -> {
             var lastIdsPerPartition = new HashMap<Integer, Long>();
             while (r.next()) {
@@ -141,9 +153,9 @@ public class EventSQLBenchmarksRunner {
 
     static ConsumerTableStats consumerTableStats(DataSource source) {
         return executeQuery(source, """
-                SELECT partition, MAX(last_event_id) FROM consumer
-                WHERE topic = '%s' AND name = '%s'
-                GROUP BY partition"""
+                SELECT eql_partition, MAX(eql_last_event_id) FROM consumer
+                WHERE eql_topic = '%s' AND eql_name = '%s'
+                GROUP BY eql_partition"""
                 .formatted(TEST_TOPIC, TEST_CONSUMER), r -> {
             var lastIdsPerPartition = new HashMap<Integer, Long>();
             while (r.next()) {

@@ -22,16 +22,17 @@ events:
       password: "${DB0_PASSWORD:events}"
       connections: 10
       enabled: ${DB0_ENABLED:true}
-    - url: "${DB1_URL:jdbc:postgresql://localhost:5433/events}"
+    - url: "${DB1_URL:jdbc:postgresql://localhost:5432/events}"
       username: "${DB1_USERNAME:events}"
       password: "${DB1_PASSWORD:events}"
       connections: 10
       enabled: ${DB1_ENABLED:false}
-    - url: "${DB2_URL:jdbc:postgresql://localhost:5434/events}"
+    - url: "${DB2_URL:jdbc:postgresql://localhost:5432/events}"
       username: "${DB2_USERNAME:events}"
       password: "${DB2_PASSWORD:events}"
       connections: 10
       enabled: ${DB2_ENABLED:false}
+  sql-dialect: "${SQL_DIALECT:POSTGRES}"
   account-created-topic:
     name: "account_created"
     partitions: 10

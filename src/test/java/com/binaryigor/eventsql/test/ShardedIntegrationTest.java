@@ -10,6 +10,7 @@ import com.binaryigor.eventsql.internal.sharded.ShardedEventSQLRegistry;
 import com.binaryigor.eventsql.internal.sql.SQLEventRepository;
 import com.binaryigor.eventsql.internal.sql.SQLTransactions;
 import org.jooq.DSLContext;
+import org.jooq.SQLDialect;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -19,6 +20,7 @@ import java.time.Duration;
 import java.util.List;
 
 import static com.binaryigor.eventsql.test.IntegrationTest.*;
+import static com.binaryigor.eventsql.test.IntegrationTestSupport.*;
 
 public abstract class ShardedIntegrationTest {
 
@@ -33,7 +35,7 @@ public abstract class ShardedIntegrationTest {
         POSTGRES2.start();
 
         dataSources = List.of(dataSource(POSTGRES1), dataSource(POSTGRES2));
-        dslContexts = dataSources.stream().map(IntegrationTest::dslContext).toList();
+        dslContexts = dataSources.stream().map(ds -> dslContext(ds, SQLDialect.POSTGRES)).toList();
     }
 
     protected EventSQL eventSQL;

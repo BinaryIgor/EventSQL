@@ -14,11 +14,12 @@ import org.jooq.impl.DSL;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.utility.DockerImageName;
 
 import javax.sql.DataSource;
 import java.time.Duration;
 import java.util.List;
+
+import static com.binaryigor.eventsql.test.IntegrationTestSupport.*;
 
 public abstract class IntegrationTest {
 
@@ -29,32 +30,7 @@ public abstract class IntegrationTest {
     static {
         POSTGRES.start();
         dataSource = dataSource(POSTGRES);
-        dslContext = dslContext(dataSource);
-    }
-
-    static PostgreSQLContainer<?> postgreSQLContainer() {
-        return new PostgreSQLContainer(DockerImageName.parse("postgres:16"));
-    }
-
-    static DataSource dataSource(PostgreSQLContainer<?> postgres) {
-        var config = new HikariConfig();
-        config.setJdbcUrl(postgres.getJdbcUrl());
-        config.setUsername(postgres.getUsername());
-        config.setPassword(postgres.getPassword());
-        return new HikariDataSource(config);
-    }
-
-    static DSLContext dslContext(DataSource dataSource) {
-        return DSL.using(dataSource, SQLDialect.POSTGRES);
-    }
-
-    static void cleanDb(DSLContext dslContext, EventSQLRegistry registry) {
-        registry.listConsumers().forEach(c -> registry.unregisterConsumer(c.topic(), c.name()));
-        registry.listTopics().forEach(t -> registry.unregisterTopic(t.name()));
-        dslContext.execute("""
-                DROP TABLE IF EXISTS event_buffer;
-                """);
-
+        dslContext = dslContext(dataSource, SQLDialect.POSTGRES);
     }
 
     protected TestClock testClock;

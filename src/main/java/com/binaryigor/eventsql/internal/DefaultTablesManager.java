@@ -25,8 +25,12 @@ public class DefaultTablesManager implements EventSQLRegistry.TablesManager {
     }
 
     @Override
-    public void prepareEventTable(String topic) {
+    public void prepareEventBufferTable() {
         eventRepository.createBuffer();
+    }
+
+    @Override
+    public void prepareEventTable(String topic) {
         eventRepository.createPartition(topic);
     }
 
