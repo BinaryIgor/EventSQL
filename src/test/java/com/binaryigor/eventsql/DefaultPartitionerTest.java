@@ -39,7 +39,7 @@ public class DefaultPartitionerTest {
     void assignsEvenlyDistributedStickyPartitionsForEventsWithDefinedKeys() {
         // given
         var eventsByKey = Stream.generate(() -> TestObjects.randomEventPublication("some_topic", UUID.randomUUID().toString()))
-                .limit(25)
+                .limit(50)
                 .collect(Collectors.toMap(EventPublication::key, Function.identity()));
         var topicPartitions = 5;
 

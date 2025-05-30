@@ -35,6 +35,7 @@ public class DefaultEventSQLRegistry implements EventSQLRegistry {
     private void registerTables() {
         tablesManager.prepareTopicTable();
         tablesManager.prepareConsumerTable();
+        tablesManager.prepareEventBufferTable();
     }
 
     // TODO: support more complex modifications

@@ -32,6 +32,16 @@
             <version>42.7.5</version>
         </dependency>
         <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>9.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mariadb.jdbc</groupId>
+            <artifactId>mariadb-java-client</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+        <dependency>
             <groupId>com.binaryigor</groupId>
             <artifactId>eventsql</artifactId>
             <version>0.0.1-SNAPSHOT</version>

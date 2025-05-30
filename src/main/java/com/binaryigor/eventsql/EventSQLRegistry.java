@@ -26,7 +26,9 @@ public interface EventSQLRegistry {
         void prepareTopicTable();
         
         void prepareConsumerTable();
-        
+
+        void prepareEventBufferTable();
+
         void prepareEventTable(String topic);
         
         void dropEventTable(String topic);

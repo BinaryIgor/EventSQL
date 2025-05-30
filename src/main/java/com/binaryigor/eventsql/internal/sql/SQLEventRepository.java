@@ -5,6 +5,7 @@ import com.binaryigor.eventsql.internal.EventInput;
 import com.binaryigor.eventsql.internal.EventRepository;
 import com.binaryigor.eventsql.internal.Transactions;
 import org.jooq.*;
+import org.jooq.exception.DataAccessException;
 import org.jooq.impl.DSL;
 
 import java.sql.Timestamp;
@@ -17,14 +18,14 @@ public class SQLEventRepository implements EventRepository {
 
     private static final Table<?> EVENT_BUFFER = DSL.table("event_buffer");
     private static final Table<?> EVENT_BUFFER_LOCK = DSL.table("event_buffer_lock");
-    private static final Field<String> TOPIC = DSL.field("topic", String.class);
-    private static final Field<Long> ID = DSL.field("id", Long.class);
-    private static final Field<Short> PARTITION = DSL.field("partition", Short.class);
-    private static final Field<String> KEY = DSL.field("key", String.class);
-    private static final Field<byte[]> VALUE = DSL.field("value", byte[].class);
-    private static final Field<JSON> METADATA = DSL.field("metadata", JSON.class);
-    private static final Field<Timestamp> BUFFERED_AT = DSL.field("buffered_at", Timestamp.class);
-    private static final Field<Timestamp> CREATED_AT = DSL.field("created_at", Timestamp.class);
+    private static final Field<String> TOPIC = DSL.field("eql_topic", String.class);
+    private static final Field<Long> ID = DSL.field("eql_id", Long.class);
+    private static final Field<Short> PARTITION = DSL.field("eql_partition", Short.class);
+    private static final Field<String> KEY = DSL.field("eql_key", String.class);
+    private static final Field<byte[]> VALUE = DSL.field("eql_value", byte[].class);
+    private static final Field<JSON> METADATA = DSL.field("eql_metadata", JSON.class);
+    private static final Field<Timestamp> BUFFERED_AT = DSL.field("eql_buffered_at", Timestamp.class);
+    private static final Field<Timestamp> CREATED_AT = DSL.field("eql_created_at", Timestamp.class);
     private final Transactions transactions;
     private final DSLContextProvider contextProvider;
 
@@ -39,7 +40,8 @@ public class SQLEventRepository implements EventRepository {
             contextProvider.get()
                     .createTableIfNotExists(EVENT_BUFFER)
                     .column(ID, ID.getDataType().identity(true))
-                    .column(TOPIC, TOPIC.getDataType().notNull())
+                    // MYSQL requires to limit text length for every indexed column
+                    .column(TOPIC, TOPIC.getDataType().notNull().length(255))
                     .column(PARTITION, PARTITION.getDataType().notNull())
                     .column(KEY)
                     .column(VALUE, VALUE.getDataType().notNull())
@@ -48,10 +50,18 @@ public class SQLEventRepository implements EventRepository {
                     .constraint(DSL.primaryKey(ID))
                     .execute();
 
-            contextProvider.get()
-                    .createIndexIfNotExists("event_buffer_topic_id")
-                    .on(EVENT_BUFFER, TOPIC, ID)
-                    .execute();
+            try {
+                // MySQL does not provide proper create index if not exists semantics
+                contextProvider.get()
+                        .createIndex("event_buffer_topic_id")
+                        .on(EVENT_BUFFER, TOPIC, ID)
+                        .execute();
+            } catch (DataAccessException e) {
+                var loweredMessage  = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+                if (!loweredMessage.contains("duplicate") && !loweredMessage.contains("exists")) {
+                    throw e;
+                }
+            }
         });
     }
 
@@ -72,7 +82,7 @@ public class SQLEventRepository implements EventRepository {
                     .execute();
 
             tContext.createTableIfNotExists(EVENT_BUFFER_LOCK)
-                    .column(TOPIC)
+                    .column(TOPIC, TOPIC.getDataType().length(255))
                     .constraint(DSL.primaryKey(TOPIC))
                     .execute();
 

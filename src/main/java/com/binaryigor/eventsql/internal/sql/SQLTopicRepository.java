@@ -13,9 +13,9 @@ import java.util.Optional;
 public class SQLTopicRepository implements TopicRepository {
 
     private static final Table<?> TOPIC = DSL.table("topic");
-    private static final Field<String> NAME = DSL.field("name", String.class);
-    private static final Field<Short> PARTITIONS = DSL.field("partitions", Short.class);
-    private static final Field<Timestamp> CREATED_AT = DSL.field("created_at", Timestamp.class);
+    private static final Field<String> NAME = DSL.field("eql_name", String.class);
+    private static final Field<Short> PARTITIONS = DSL.field("eql_partitions", Short.class);
+    private static final Field<Timestamp> CREATED_AT = DSL.field("eql_created_at", Timestamp.class);
     private final DSLContextProvider contextProvider;
 
     public SQLTopicRepository(DSLContextProvider contextProvider) {
@@ -26,7 +26,8 @@ public class SQLTopicRepository implements TopicRepository {
     public void createTable() {
         contextProvider.get()
                 .createTableIfNotExists(TOPIC)
-                .column(NAME)
+                // MYSQL requires to limit text length for every indexed column
+                .column(NAME, NAME.getDataType().length(255))
                 .column(PARTITIONS, PARTITIONS.getDataType().notNull())
                 .column(CREATED_AT, CREATED_AT.getDataType().notNull().defaultValue(DSL.now()))
                 .constraint(DSL.constraint().primaryKey(NAME))
