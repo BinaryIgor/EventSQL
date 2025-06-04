@@ -2,13 +2,13 @@
 
 Events over SQL.
 
-Simple, Reliable, Fast.
+Simple. Reliable. Fast.
 
 Able to publish and consume thousands of events per second on a single Postgres instance.
 
-With sharding, it can easily support tens of thousands events per second for virtually endless scalability.
+With sharding, it can easily support tens and hundreds of thousands events per second for virtually endless scalability.
 
-For scalability details, see [benchmarks](/benchmarks/README.md).
+For proofs, see [benchmarks](/benchmarks/README.md).
 
 ## How it works
 

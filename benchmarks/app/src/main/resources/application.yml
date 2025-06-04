@@ -20,7 +20,7 @@ events:
     - url: "${DB0_URL:jdbc:postgresql://localhost:5432/events}"
       username: "${DB0_USERNAME:events}"
       password: "${DB0_PASSWORD:events}"
-      connections: 10
+      connections: 20
       enabled: ${DB0_ENABLED:true}
     - url: "${DB1_URL:jdbc:postgresql://localhost:5432/events}"
       username: "${DB1_USERNAME:events}"
@@ -35,7 +35,7 @@ events:
   sql-dialect: "${SQL_DIALECT:POSTGRES}"
   account-created-topic:
     name: "account_created"
-    partitions: 10
+    partitions: 20
   account-created-topic-dlt:
     name: "${events.account-created-topic.name}_dlt"
     partitions: 10

@@ -17,7 +17,7 @@ Some background and details:
 Defined in the `prepare_infra.py` script; sometimes resources are limited by `docker run` command, but essentially:
 * *benchmarks-app (consumer)* runs on 2 GB and 2 CPUs (AMD) machine
 * each *events-db* runs on 8 GB and 4 CPUs (AMD) machine
-* each *benchmarks-runner* runs alongside *events-db*, but is throttled to 2 GB memory and 2 CPUs 
+* each *benchmarks-runner* runs alongside *events-db*
 * there is a basic firewall and virtual private network (vpc) setup (`prepare_infra.py`), so that nobody is bothering us during benchmarks
 
 ## Requirements
@@ -53,6 +53,8 @@ To each we have access, using ssh public key authentication, as the `eventsql` u
 Infrastructure is now ready, let's prepare apps.
 
 ### Apps
+
+TODO: what about building the library first?
 
 Let's build `events-db` (from scripts dir again):
 ```
