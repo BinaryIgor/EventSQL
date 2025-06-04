@@ -12,9 +12,11 @@ import java.sql.ResultSet;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.stream.Stream;
 
 public class EventSQLBenchmarksRunner {
 
@@ -26,6 +28,7 @@ public class EventSQLBenchmarksRunner {
     static final EventSQLDialect SQL_DIALECT;
     static final int RUNNER_INSTANCES = envIntValueOrDefault("RUNNER_INSTANCES", 1);
     static final int EVENTS_TO_PUBLISH = envIntValueOrDefault("EVENTS_TO_PUBLISH", 60_000);
+    static final int EVENTS_BATCH_SIZE = envIntValueOrDefault("EVENTS_BATCH_SIZE", 1);
     static final int EVENTS_RATE = envIntValueOrDefault("EVENTS_RATE", 1_000);
     static final String TEST_TOPIC = envValueOrDefault("TEST_TOPIC", "account_created");
     static final String TEST_CONSUMER = envValueOrDefault("TEST_CONSUMER", "benchmarks-consumer");
@@ -182,15 +185,27 @@ public class EventSQLBenchmarksRunner {
     static void publishEvents(EventSQLPublisher publisher) throws Exception {
         var futures = new LinkedList<Future<?>>();
 
+        String eventsWerePublishedMessage;
+        if (EVENTS_BATCH_SIZE > 1) {
+            eventsWerePublishedMessage = "events were published - in batches of " + EVENTS_BATCH_SIZE;
+        } else {
+            eventsWerePublishedMessage = "events were published";
+        }
+
+        var publishRate = EVENTS_RATE / EVENTS_BATCH_SIZE;
+        var batchesToPublish = EVENTS_TO_PUBLISH / EVENTS_BATCH_SIZE;
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            for (var i = 0; i < EVENTS_TO_PUBLISH; i++) {
-                var result = executor.submit(() -> publishRandomEvent(publisher));
+            for (var i = 0; i < batchesToPublish; i++) {
+                var result = executor.submit(() -> publishRandomEventOrEventsBatch(publisher));
                 futures.add(result);
 
                 var publications = i + 1;
-                if (futures.size() >= EVENTS_RATE && publications < EVENTS_TO_PUBLISH) {
-                    System.out.printf("%s, %d/%d events were published, waiting 1s before next publications...%n",
-                            LocalDateTime.now(), publications, EVENTS_TO_PUBLISH);
+                if (futures.size() >= publishRate && publications < batchesToPublish) {
+                    System.out.printf("%s, %d/%d %s, waiting 1s before next publications...%n",
+                            LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS),
+                            publications * EVENTS_BATCH_SIZE,
+                            EVENTS_TO_PUBLISH,
+                            eventsWerePublishedMessage);
                     Thread.sleep(1000);
                     awaitForFutures(futures);
                     futures.clear();
@@ -204,11 +219,18 @@ public class EventSQLBenchmarksRunner {
         }
     }
 
-    static void publishRandomEvent(EventSQLPublisher publisher) {
+    static void publishRandomEventOrEventsBatch(EventSQLPublisher publisher) {
         try {
             // make publication more evenly distributed in time
             Thread.sleep(RANDOM.nextInt(1000));
-            publisher.publish(nextEvent());
+            if (EVENTS_BATCH_SIZE > 1) {
+                var batch = Stream.generate(EventSQLBenchmarksRunner::nextEvent)
+                        .limit(EVENTS_BATCH_SIZE)
+                        .toList();
+                publisher.publishAll(batch);
+            } else {
+                publisher.publish(nextEvent());
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }

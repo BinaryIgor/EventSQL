@@ -25,7 +25,7 @@ import static java.util.Collections.unmodifiableList;
 
 public class EventSQL {
 
-    public static final int DEFAULT_FLUSH_PUBLISH_BUFFER_SIZE = 500;
+    public static final int DEFAULT_FLUSH_PUBLISH_BUFFER_SIZE = 1000;
     // delay is applied only if there is no more records to flush; see DefaultEventSQLPublisher.startFlushPublishBufferThread()
     public static final Duration DEFAULT_FLUSH_PUBLISH_BUFFER_DELAY = Duration.ofMillis(250);
     private final EventSQLRegistry registry;

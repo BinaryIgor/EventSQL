@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Component
@@ -23,7 +22,6 @@ public class EventsConsumer {
     private final EventSQL eventSQL;
     private final ObjectMapper objectMapper;
     private final EventsProperties eventsProperties;
-    private final AtomicBoolean accountCreatedBatchHandler = new AtomicBoolean(true);
     private final Map<String, Counter> accountHandledCountersByConsumer;
 
     public EventsConsumer(EventSQL eventSQL,
@@ -41,10 +39,6 @@ public class EventsConsumer {
                                 .register(meterRegistry)));
     }
 
-    public void batchAccountCreatedHandler(boolean batch) {
-        accountCreatedBatchHandler.set(batch);
-    }
-
     @PostConstruct
     void start() {
         eventSQL.registry()
@@ -56,13 +50,7 @@ public class EventsConsumer {
                     eventSQL.registry().registerConsumer(c);
                     eventSQL.consumers()
                             .startBatchConsumer(c.topic(), c.name(),
-                                    events -> {
-                                        if (accountCreatedBatchHandler.get()) {
-                                            handleAccountCreatedEvents(c.name(), events);
-                                        } else {
-                                            events.forEach(e -> handleAccountCreatedEvent(c.name(), e));
-                                        }
-                                    },
+                                    events -> handleAccountCreatedEvents(c.name(), events),
                                     EventSQLConsumers.ConsumptionConfig.of(10, 100));
                 });
     }
@@ -70,20 +58,6 @@ public class EventsConsumer {
     @PreDestroy
     void stop() {
         eventSQL.consumers().stop(Duration.ofSeconds(5));
-    }
-
-    private void handleAccountCreatedEvent(String consumer, Event event) {
-        try {
-            var accountCreated = objectMapper.readValue(event.value(), AccountCreated.class);
-            handleDelay();
-            accountHandledCountersByConsumer.get(consumer)
-                    .increment();
-        } catch (IllegalStateException e) {
-            throw new EventSQLConsumptionException(e, event);
-        } catch (Exception e) {
-            logger.error("Problem while handling AccountCreated event:", e);
-            throw new RuntimeException(e);
-        }
     }
 
     private void handleAccountCreatedEvents(String consumer, List<Event> events) {
