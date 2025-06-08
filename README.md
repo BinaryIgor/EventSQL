@@ -300,9 +300,14 @@ When you use `EventSQLConsumers.startBatchConsumer` you have to do the wrapping 
 
 Maven:
 ```
-TODO: publish it
+<dependency>
+    <groupId>com.binaryigor</groupId>
+    <artifactId>eventsql</artifactId>
+    <version>0.0.1</version>
+</dependency>
 ```
 Gradle:
 ```
-TODO: publish it
+implementation 'com.binaryigor:eventsql:0.0.1'
+implementation("com.binaryigor:eventsql:0.0.1")
 ```
