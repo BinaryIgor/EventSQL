@@ -7,11 +7,39 @@
     <groupId>com.binaryigor</groupId>
     <artifactId>eventsql</artifactId>
     <version>0.0.1-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>EventSQL</name>
+    <description>Events over SQL.</description>
+    <url>https://github.com/BinaryIgor/EventSQL</url>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/license/mit</url>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <name>Igor Roztropiński</name>
+            <email>igor@binaryigor.com</email>
+            <organization>Binary Igor</organization>
+            <organizationUrl>https://binaryigor.com</organizationUrl>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com/BinaryIgor/EventSQL.git</connection>
+        <developerConnection>scm:git:ssh://github.com:BinaryIgor/EventSQL.git</developerConnection>
+        <url>https://github.com/BinaryIgor/EventSQL/tree/master</url>
+    </scm>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-        <maven.compiler.release>21</maven.compiler.release>
+        <java.version>21</java.version>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
+        <maven.compiler.release>${java.version}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- not latest, for safer support of older dbs: https://www.jooq.org/download/support-matrix -->
         <jooq.version>3.19.11</jooq.version>
@@ -24,6 +52,12 @@
         <mysql.driver.version>9.1.0</mysql.driver.version>
         <mariadb.driver.version>3.5.3</mariadb.driver.version>
         <jacoco.version>0.8.13</jacoco.version>
+
+        <!-- plugins -->
+        <maven.central.publish.plugin.version>0.7.0</maven.central.publish.plugin.version>
+        <maven.source.plugin.version>2.2.1</maven.source.plugin.version>
+        <maven.javadoc.plugin.version>2.9.1</maven.javadoc.plugin.version>
+        <maven.gpg.plugin.version>1.5</maven.gpg.plugin.version>
     </properties>
 
     <dependencies>
@@ -128,6 +162,67 @@
                                 <phase>prepare-package</phase>
                                 <goals>
                                     <goal>report</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${maven.central.publish.plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>${maven.source.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>${maven.javadoc.plugin.version}</version>
+                        <configuration>
+                            <links>
+                                <link>https://docs.oracle.com/en/java/javase/${java.version}/docs/api</link>
+                            </links>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven.gpg.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
                                 </goals>
                             </execution>
                         </executions>
