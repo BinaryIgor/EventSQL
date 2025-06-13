@@ -16,7 +16,7 @@ Some background and details:
 
 Defined in the `prepare_infra.py` script; sometimes resources are limited by `docker run` command, but essentially:
 * *benchmarks-app (consumer)* runs on 2 GB and 2 CPUs (AMD) machine
-* each *events-db* runs on 8 GB and 4 CPUs (AMD) machine
+* each *events-db* runs on 16 GB and 8 CPUs (AMD) machine
 * each *benchmarks-runner* runs alongside *events-db*
 * there is a basic firewall and virtual private network (vpc) setup (`prepare_infra.py`), so that nobody is bothering us during benchmarks
 
@@ -52,14 +52,6 @@ We right now have four machines connected to each other by the vpc.
 To each we have access, using ssh public key authentication, as the `eventsql` user.
 Infrastructure is now ready, let's prepare apps.
 
-### EventSQL
-
-Before building apps, make sure that EventSQL is available on your machine, since it's their dependency. Just run:
-```
-mvn clean install
-```
-From the root repo directory.
-
 ### Apps
 
 Let's build `events-db` (from scripts dir again):
@@ -93,9 +85,9 @@ We deploy by copying gzipped Docker images alongside with load and run scripts t
 
 Three `events-dbs`:
 ```
-export EVENTS_DB0_HOST=<ip of events-db-0 machine"
-export EVENTS_DB1_HOST=<ip of events-db-1 machine"
-export EVENTS_DB2_HOST=<ip of events-db-2 machine"
+export EVENTS_DB0_HOST=<public ip of events-db-0 machine"
+export EVENTS_DB1_HOST=<public ip of events-db-1 machine"
+export EVENTS_DB2_HOST=<public ip of events-db-2 machine"
 bash deploy_events_dbs.bash
 ```
 
@@ -109,9 +101,9 @@ All dbs and app are running now.
 With `benchmark-runners` it is slightly different - we will copy them to target machines but not run just yet.
 They will run on the same machines dbs are hosted; each db has a corresponding benchmarks-runner:
 ```
-export EVENTS_DB0_HOST=<ip of events-db-0 machine"
-export EVENTS_DB1_HOST=<ip of events-db-1 machine"
-export EVENTS_DB2_HOST=<ip of events-db-2 machine"
+export EVENTS_DB0_HOST=<public ip of events-db-0 machine"
+export EVENTS_DB1_HOST=<public ip of events-db-1 machine"
+export EVENTS_DB2_HOST=<public ip of events-db-2 machine"
 bash deploy_runners.bash
 ```
 
@@ -139,7 +131,7 @@ Stats collected, sleeping for 10 s...
 ...
 ```
 
-You might do the same for the consumer machine to its  stats as well.
+You might do the same for the consumer machine to see its stats as well.
 
 Finally, let's run various benchmarks:
 ```
@@ -156,6 +148,10 @@ bash run_single_db_benchmark.bash
 export EVENTS_RATE=10000
 export EVENTS_TO_PUBLISH=600000
 bash run_single_db_benchmark.bash
+
+export EVENTS_RATE=15000
+export EVENTS_TO_PUBLISH=900000
+bash run_single_db_benchmark.bash
 ```
 
 ### Multiple dbs
@@ -169,20 +165,24 @@ export RUNNER0_HOST=<events-db-0-ip>
 export RUNNER1_HOST=<events-db-1-ip>
 export RUNNER2_HOST=<events-db-2-ip>
 
-export EVENTS_RATE=5000
+export EVENTS_RATE=10000
 # EVENTS_RATE * 60 for benchmark to last approximately 1 minute
-export EVENTS_TO_PUBLISH=300000
+export EVENTS_TO_PUBLISH=600000
 bash run_multiple_dbs_benchmark.bash
 
-export EVENTS_RATE=10000
-export EVENTS_TO_PUBLISH=600000
+export EVENTS_RATE=15000
+export EVENTS_TO_PUBLISH=900000
+bash run_multiple_dbs_benchmark.bash
+
+export EVENTS_RATE=20000
+export EVENTS_TO_PUBLISH=1200000
 bash run_multiple_dbs_benchmark.bash
 ```
 
 We have 3 dbs (shards), so real rates are:
 ```
-3 * 5000  = 15 000 per second
-3 * 10000 = 30 000 per second
+3 * 10000  = 30 000 per second
+3 * 15000 = 45 000 per second
 ```
 ...which is quite a lot!
 
