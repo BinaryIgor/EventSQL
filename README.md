@@ -12,78 +12,79 @@ For proofs, see [benchmarks](/benchmarks/README.md).
 
 ## How it works
 
-We just need to have a few tables (postgres syntax, schema managed fully by EventSQL):
-
+We just need to have a few tables. Column names should be prefixed because some of the names are reserved keywords in some databases (Postgres syntax, schema is fully managed by EventSQL):
 ```sql
 CREATE TABLE topic (
-  name TEXT PRIMARY KEY,
-  partitions SMALLINT NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  eql_name TEXT PRIMARY KEY,
+  eql_partitions SMALLINT NOT NULL,
+  eql_created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE consumer (
-  topic TEXT NOT NULL,
-  name TEXT NOT NULL,
-  partition SMALLINT NOT NULL,
-  first_event_id BIGINT,
-  last_event_id BIGINT,
-  last_consumption_at TIMESTAMP,
-  consumed_events BIGINT NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (topic, name, partition)
+  eql_topic TEXT NOT NULL,
+  eql_name TEXT NOT NULL,
+  eql_partition SMALLINT NOT NULL,
+  eql_first_event_id BIGINT,
+  eql_last_event_id BIGINT,
+  eql_last_consumption_at TIMESTAMP,
+  eql_consumed_events BIGINT NOT NULL,
+  eql_created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (eql_topic, eql_name, eql_partition)
 );
 
 CREATE TABLE {topic}_event (
-  id BIGSERIAL PRIMARY KEY,
-  partition SMALLINT NOT NULL,
-  key TEXT,
-  value BYTEA NOT NULL,
-  buffered_at TIMESTAMP NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  metadata JSON NOT NULL
+  eql_id BIGSERIAL PRIMARY KEY,
+  eql_partition SMALLINT NOT NULL,
+  eql_key TEXT,
+  eql_value BYTEA NOT NULL,
+  eql_buffered_at TIMESTAMP NOT NULL,
+  eql_created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  eql_metadata JSON NOT NULL
 );
 
 -- Same schema as event, just not partitioned (by topic). --
 -- It is used to handle eventual consistency of auto increment; --
--- there is no guarantee that record of id 2 is visible after id 1 record. --
+-- there is no guarantee that record of id 2 is visible only after id 1 record. --
 -- Events are first inserted to the event_buffer; --
--- they are then moved to the {topic}_event table in bulk, by a single, serialized writer (per topic); --
--- because there is only one writer, it fixes eventual consistency issue --
+-- they are then moved to the {topic}_event table in bulk, by a single, serialized writer (per topic). --
+-- Because there is only one writer, it fixes eventual consistency issue --
 CREATE TABLE event_buffer (
-  id BIGSERIAL PRIMARY KEY,
-  topic TEXT NOT NULL,
-  partition SMALLINT NOT NULL,
-  key TEXT,
-  value BYTEA NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  metadata JSON NOT NULL
+  eql_id BIGSERIAL PRIMARY KEY,
+  eql_topic TEXT NOT NULL,
+  eql_partition SMALLINT NOT NULL,
+  eql_key TEXT,
+  eql_value BYTEA NOT NULL,
+  eql_created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  eql_metadata JSON NOT NULL
 );
-CREATE INDEX event_buffer_topic_id ON event_buffer (topic, id);
+CREATE INDEX event_buffer_topic_id ON event_buffer (eql_topic, eql_id);
 -- Used to lock single (per topic) event_buffer to {topic}_event writer --
 CREATE TABLE event_buffer_lock (
-  topic TEXT PRIMARY KEY
+  eql_topic TEXT PRIMARY KEY
 );
 ```
 
-To consume events, we just need to periodically (every one to a few seconds) do:
-
+To consume events, we periodically do (every one to several seconds):
 ```sql
 BEGIN;
 
 SELECT * FROM consumer 
-WHERE topic = :topic AND name = :c_name 
+WHERE eql_topic = :topic 
+  AND eql_name = :c_name 
 FOR UPDATE SKIP LOCKED;
 
 SELECT * FROM {topic}_event
-WHERE (:last_event_id IS NULL OR id > :last_event_id)
-ORDER BY id LIMIT :limit;
+WHERE (:last_event_id IS NULL OR eql_id > :last_event_id)
+ORDER BY eql_id
+LIMIT :limit;
 
 (process events)
 
 UPDATE consumer 
-SET last_event_id = :id,
-    last_consumption_at = :now 
-WHERE topic = :topic AND name = :c_name;
+SET eql_last_event_id = :id,
+    eql_last_consumption_at = :now 
+WHERE eql_topic = :topic 
+  AND eql_name = :c_name;
 
 COMMIT;
 ```
@@ -99,19 +100,25 @@ Consumption of such events per partition (0 in an example) might look like this:
 BEGIN;
 
 SELECT * FROM consumer 
-WHERE topic = :topic AND name = :c_name AND partition = 0 
+WHERE eql_topic = :topic 
+  AND eql_name = :c_name 
+  AND eql_partition = 0 
 FOR UPDATE SKIP LOCKED;
 
 SELECT * FROM {topic}_event
-WHERE partition = 0 AND (:last_event_id IS NULL OR id > :last_event_id)
-ORDER BY id LIMIT :limit;
+WHERE (:last_event_id IS NULL OR eql_id > :last_event_id)
+  AND eql_partition = 0
+ORDER BY eql_id 
+LIMIT :limit;
 
 (process events)
 
 UPDATE consumer 
-SET last_event_id = :id,
-    last_consumption_at = :now
-WHERE topic = :topic AND name = :c_name AND partition = 0;
+SET eql_last_event_id = :id,
+    eql_last_consumption_at = :now
+WHERE eql_topic = :topic
+  AND eql_name = :c_name 
+  AND eql_partition = 0;
 
 COMMIT;
 ```
@@ -303,11 +310,11 @@ Maven:
 <dependency>
     <groupId>com.binaryigor</groupId>
     <artifactId>eventsql</artifactId>
-    <version>0.0.1</version>
+    <version>1.0.0</version>
 </dependency>
 ```
 Gradle:
 ```
-implementation 'com.binaryigor:eventsql:0.0.1'
-implementation("com.binaryigor:eventsql:0.0.1")
+implementation 'com.binaryigor:eventsql:1.0.0'
+implementation("com.binaryigor:eventsql:1.0.0")
 ```
