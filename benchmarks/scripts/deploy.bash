@@ -10,7 +10,7 @@ previous_deploy_dir="$deploy_dir/previous"
 latest_deploy_dir="$deploy_dir/latest"
 skip_running=${SKIP_RUNNING:-false}
 
-echo "Deploying $app to a $remote_host host, preparing deploy directories.."
+echo "Deploying $app to $remote_host host, preparing deploy directories.."
 
 ssh -oStrictHostKeyChecking=accept-new "${remote_host}" "rm -r -f $previous_deploy_dir;
      mkdir -p $latest_deploy_dir;
