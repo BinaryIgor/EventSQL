@@ -242,7 +242,7 @@ def create_vpc_if_needed():
         print("VPC exists, skipping its creation!")
         return ip_range, vpc_id
 
-    print("VPC does not exist, creating it..")
+    print("VPC does not exist, creating it...")
 
     created_vpc = create_resource(VPC_RESOURCE, "vpc", vpc_config)
     print("VPC created!")
@@ -262,7 +262,7 @@ def create_and_assign_firewall_if_needed(droplet_names_ids, internal_ip_range):
     if firewall_id:
         print("Firewall exists, skipping its creation!")
     else:
-        print("Firewall does not exist, creating it..")
+        print("Firewall does not exist, creating it...")
         created_firewall = create_resource(FIREWALLS_RESOURCE, "firewall", firewall_config(internal_ip_range))
         firewall_id = created_firewall[ID]
         print("Firewall created!")
